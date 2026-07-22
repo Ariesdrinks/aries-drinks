@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Aries Drinks</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial; background: #2c3e50; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .login-box { background: white; padding: 40px; border-radius: 15px; text-align: center; width: 350px; }
+        .login-box img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; }
+        .login-box input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+        .login-box button { background: #e74c3c; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%; }
+        .admin-box { background: white; padding: 25px; border-radius: 15px; width: 95%; max-width: 950px; display: none; max-height: 90vh; overflow-y: auto; }
+        .admin-logo { text-align: center; margin-bottom: 10px; }
+        .admin-logo img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
+        .admin-box h2 { color: #2c3e50; border-bottom: 3px solid #e74c3c; padding-bottom: 10px; margin-bottom: 15px; }
+        .tabs { display: flex; gap: 5px; margin-bottom: 15px; flex-wrap: wrap; }
+        .tab { padding: 10px 18px; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 14px; background: #eee; color: #666; border: none; }
+        .tab.activa { background: #e74c3c; color: white; }
+        .seccion-admin { display: none; }
+        .seccion-admin.activa { display: block; }
+        .form-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .form-row input, .form-row select { flex: 1; min-width: 130px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; }
+        button { background: #e74c3c; color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+        button:hover { opacity: 0.9; }
+        .btn-verde { background: #27ae60; }
+        .btn-azul { background: #2980b9; }
+        .btn-gris { background: #95a5a6; }
+        .btn-rojo { background: #c0392b; padding: 5px 12px; font-size: 12px; }
+        .btn-naranja { background: #e67e22; padding: 5px 12px; font-size: 12px; }
+
+        .categoria-admin { background: #f9f9f9; margin-bottom: 8px; border-radius: 10px; overflow: hidden; }
+        .categoria-admin-titulo { background: #e74c3c; color: white; padding: 12px 15px; font-size: 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        .categoria-admin.abierta .categoria-admin-contenido { display: block; }
+        .categoria-admin-contenido { display: none; }
+        .subcategoria-admin { border-top: 1px solid #eee; }
+        .subcategoria-admin-titulo { background: #fdf2f2; padding: 10px 15px; font-size: 14px; font-weight: bold; color: #c0392b; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .subcategoria-admin.abierta .subcategoria-admin-productos { display: block; }
+        .subcategoria-admin-productos { display: none; padding: 5px 10px; }
+
+        .producto-item { background: white; padding: 10px; margin: 4px 0; border-radius: 8px; border-left: 4px solid #e74c3c; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .producto-item.combo { border-left-color: #f39c12; }
+        .producto-item .info { flex: 1; min-width: 180px; }
+        .producto-item .info strong { font-size: 14px; }
+        .producto-item .info small { display: block; color: #666; font-size: 12px; }
+        .producto-item .acciones { display: flex; gap: 5px; }
+        .stock-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; }
+        .stock-alto { background: #d4edda; color: #155724; }
+        .stock-medio { background: #fff3cd; color: #856404; }
+        .stock-bajo { background: #f8d7da; color: #721c24; }
+        .combo-badge { background: #f39c12; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; }
+
+        .barrio-item { background: #f0f8ff; padding: 10px 15px; margin: 5px 0; border-radius: 8px; border-left: 4px solid #2980b9; display: flex; justify-content: space-between; align-items: center; }
+        textarea { width: 100%; height: 200px; font-family: monospace; margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-contenido { background: white; padding: 25px; border-radius: 15px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+        .modal-contenido h3 { margin-bottom: 15px; color: #e74c3c; }
+        .modal-contenido input, .modal-contenido select { width: 100%; padding: 10px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 8px; }
+        .modal-acciones { display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px; }
+        .busqueda { margin-bottom: 15px; }
+        .busqueda input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 25px; font-size: 15px; }
+        .aviso-sync { background: #d4edda; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 15px; color: #155724; font-weight: bold; }
+        .combo-productos { background: #fff9e6; padding: 10px; border-radius: 8px; margin: 10px 0; }
+        .combo-productos h4 { color: #e67e22; margin-bottom: 8px; }
+        .combo-item { display: flex; gap: 8px; align-items: center; margin-bottom: 5px; }
+        .combo-item select { flex: 1; }
+        .combo-item input { width: 60px; }
+        .sin-resultados { text-align: center; padding: 20px; color: #999; }
+    </style>
+</head>
+<body>
+    <div id="loginScreen" class="login-box">
+        <img src="img/logo.jpeg" alt="Aries Drinks" onerror="this.style.display='none'">
+        <h2>🔐 Panel Admin</h2>
+        <h3 style="color:#e74c3c;">Aries Drinks</h3>
+        <input type="password" id="passInput" placeholder="Contraseña">
+        <button onclick="login()">Ingresar</button>
+        <p id="error" style="color:red;display:none;margin-top:10px;">Contraseña incorrecta</p>
+    </div>
+
+    <div id="adminScreen" class="admin-box">
+        <div class="admin-logo">
+            <img src="img/logo.jpeg" alt="Aries Drinks" onerror="this.style.display='none'">
+        </div>
+        <h2>📊 Panel de Administración</h2>
+        <div class="aviso-sync">✅ Stock sincronizado con Local y Delivery</div>
+        
+        <div class="tabs">
+            <button class="tab activa" onclick="cambiarTab('productos')">📦 Productos</button>
+            <button class="tab" onclick="cambiarTab('barrios')">🚚 Barrios</button>
+            <button class="tab" onclick="cambiarTab('exportar')">📋 Exportar</button>
+        </div>
+
+        <div id="seccionProductos" class="seccion-admin activa">
+            <div style="background:#f0f8ff;padding:15px;border-radius:10px;margin-bottom:15px;">
+                <h3 style="color:#e74c3c;margin-bottom:10px;">➕ Agregar Producto</h3>
+                <div class="form-row">
+                    <input type="text" id="nomProd" placeholder="Nombre *">
+                    <input type="text" id="catProd" placeholder="Categoría *">
+                </div>
+                <div class="form-row">
+                    <input type="text" id="subcatProd" placeholder="Subcategoría">
+                    <input type="number" id="precioProd" placeholder="Precio $ *">
+                </div>
+                <div class="form-row">
+                    <input type="text" id="descProd" placeholder="Descripción">
+                    <input type="number" id="stockProd" placeholder="Stock inicial">
+                </div>
+                <div class="form-row">
+                    <input type="text" id="imgProd" placeholder="Imagen (ruta o link)">
+                </div>
+                <div class="form-row">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="esComboProd" onchange="toggleComboConfig()"> ¿Es un combo?
+                    </label>
+                </div>
+                <div id="comboConfig" style="display:none;background:#fff9e6;padding:10px;border-radius:8px;margin-bottom:10px;">
+                    <h4 style="color:#e67e22;margin-bottom:8px;">🎁 Productos del combo:</h4>
+                    <div id="comboProductosList"></div>
+                    <button class="btn-naranja" onclick="agregarProductoCombo()" style="margin-top:5px;">+ Agregar producto al combo</button>
+                </div>
+                <button class="btn-verde" onclick="agregarProducto()">➕ Agregar Producto</button>
+            </div>
+
+            <h3>📦 Productos: <span id="cantProductos">0</span></h3>
+            <div class="busqueda">
+                <input type="text" id="buscarProd" placeholder="🔍 Buscar producto..." oninput="filtrar()">
+            </div>
+            <div id="listaCategorias"></div>
+        </div>
+
+        <div id="seccionBarrios" class="seccion-admin">
+            <div style="background:#f0f8ff;padding:15px;border-radius:10px;margin-bottom:15px;">
+                <h3 style="color:#2980b9;margin-bottom:10px;">➕ Agregar Barrio</h3>
+                <div class="form-row">
+                    <input type="text" id="nombreBarrio" placeholder="Nombre del barrio *">
+                    <input type="number" id="precioBarrio" placeholder="Precio de envío $ *">
+                </div>
+                <button class="btn-azul" onclick="agregarBarrio()">➕ Agregar Barrio</button>
+            </div>
+            <h3>🚚 Barrios: <span id="cantBarrios">0</span></h3>
+            <div id="listaBarrios"></div>
+        </div>
+
+        <div id="seccionExportar" class="seccion-admin">
+            <div style="background:white;padding:15px;border-radius:10px;">
+                <h3 style="color:#e74c3c;margin-bottom:10px;">📋 Código para config.js</h3>
+                <textarea id="codigoExport" readonly></textarea>
+                <button onclick="copiarCodigo()">📋 Copiar</button>
+                <button onclick="descargar()" style="margin-left:5px;">💾 Descargar config.js</button>
+            </div>
+        </div>
+        <br>
+        <button class="btn-gris" onclick="logout()">🚪 Cerrar Sesión</button>
+    </div>
+
+    <div class="modal" id="modalEditar">
+        <div class="modal-contenido">
+            <h3>✏️ Editar Producto</h3>
+            <input type="hidden" id="editId">
+            <input type="text" id="editNom" placeholder="Nombre *">
+            <input type="text" id="editCat" placeholder="Categoría *">
+            <input type="text" id="editSubcat" placeholder="Subcategoría">
+            <input type="text" id="editDesc" placeholder="Descripción">
+            <input type="number" id="editPrecio" placeholder="Precio $ *">
+            <input type="number" id="editStock" placeholder="Stock *">
+            <input type="text" id="editImg" placeholder="Imagen (ruta o link)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
+                <input type="checkbox" id="editEsCombo" onchange="toggleEditCombo()"> ¿Es un combo?
+            </label>
+            <div id="editComboConfig" style="display:none;background:#fff9e6;padding:10px;border-radius:8px;margin-bottom:8px;">
+                <h4 style="color:#e67e22;margin-bottom:8px;">🎁 Productos del combo:</h4>
+                <div id="editComboProductosList"></div>
+                <button class="btn-naranja" onclick="agregarEditComboProducto()" style="margin-top:5px;">+ Agregar producto</button>
+            </div>
+            <div class="modal-acciones">
+                <button class="btn-gris" onclick="cerrarModal()">Cancelar</button>
+                <button class="btn-azul" onclick="guardarEdicion()">💾 Guardar y Sincronizar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script>
+        let prods = [];
+        let barrios = [];
+        let editComboTemp = [];
+
+        function cargarDatos() {
+            var guardado = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}');
+            if (guardado.stock && Object.keys(guardado.stock).length > 0) {
+                prods = PRODUCTOS.map(function(p) {
+                    return {
+                        id: p.id || 0, categoria: p.categoria || "", subcategoria: p.subcategoria || "",
+                        nombre: p.nombre || "", descripcion: p.descripcion || "", precio: p.precio || 0,
+                        stock: guardado.stock[p.id] !== undefined ? guardado.stock[p.id] : (p.stock || 0),
+                        imagen: p.imagen || "", esCombo: p.esCombo || false, productos: p.productos || []
+                    };
+                });
+            } else {
+                prods = PRODUCTOS.map(function(p) {
+                    return {
+                        id: p.id || 0, categoria: p.categoria || "", subcategoria: p.subcategoria || "",
+                        nombre: p.nombre || "", descripcion: p.descripcion || "", precio: p.precio || 0,
+                        stock: p.stock || 0, imagen: p.imagen || "", esCombo: p.esCombo || false, productos: p.productos || []
+                    };
+                });
+                sincronizarStock();
+            }
+            barrios = CONFIG.zonasEnvio.map(function(b) { return { nombre: b.nombre, precio: b.precio }; });
+        }
+
+        function sincronizarStock() {
+            var stockData = {};
+            prods.forEach(function(p) { stockData[p.id] = p.stock; });
+            var guardado = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}');
+            guardado.stock = stockData;
+            localStorage.setItem('ariesDrinks_data', JSON.stringify(guardado));
+        }
+
+        function cambiarTab(tab) {
+            document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('activa'); });
+            document.querySelectorAll('.seccion-admin').forEach(function(s) { s.classList.remove('activa'); });
+            if (tab === 'productos') { document.querySelectorAll('.tab')[0].classList.add('activa'); document.getElementById('seccionProductos').classList.add('activa'); }
+            else if (tab === 'barrios') { document.querySelectorAll('.tab')[1].classList.add('activa'); document.getElementById('seccionBarrios').classList.add('activa'); }
+            else { document.querySelectorAll('.tab')[2].classList.add('activa'); document.getElementById('seccionExportar').classList.add('activa'); actualizarExport(); }
+        }
+
+        function login() {
+            if (document.getElementById('passInput').value === CONFIG.passwordAdmin) {
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('adminScreen').style.display = 'block';
+                cargarDatos();
+                actualizarProductos();
+                actualizarBarrios();
+            } else { document.getElementById('error').style.display = 'block'; }
+        }
+
+        function logout() {
+            document.getElementById('loginScreen').style.display = 'block';
+            document.getElementById('adminScreen').style.display = 'none';
+            document.getElementById('passInput').value = '';
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function toggleComboConfig() {
+            document.getElementById('comboConfig').style.display = document.getElementById('esComboProd').checked ? 'block' : 'none';
+        }
+
+        function agregarProductoCombo() {
+            var div = document.getElementById('comboProductosList');
+            var html = '<div class="combo-item"><select class="combo-prod-select">';
+            prods.forEach(function(p) { if (!p.esCombo) html += '<option value="' + p.id + '">' + p.nombre + '</option>'; });
+            html += '</select><input type="number" class="combo-cant" value="1" min="1"><button class="btn-rojo" onclick="this.parentElement.remove()">X</button></div>';
+            div.innerHTML += html;
+        }
+
+        function agregarProducto() {
+            var nom = document.getElementById('nomProd').value.trim();
+            var cat = document.getElementById('catProd').value.trim();
+            var subcat = document.getElementById('subcatProd').value.trim();
+            var desc = document.getElementById('descProd').value.trim();
+            var precio = parseInt(document.getElementById('precioProd').value);
+            var stock = parseInt(document.getElementById('stockProd').value) || 0;
+            var img = document.getElementById('imgProd').value.trim();
+            var esCombo = document.getElementById('esComboProd').checked;
+            var comboProd = [];
+            if (esCombo) {
+                var selects = document.querySelectorAll('#comboProductosList .combo-prod-select');
+                var cants = document.querySelectorAll('#comboProductosList .combo-cant');
+                for (var i = 0; i < selects.length; i++) {
+                    comboProd.push({ id: parseInt(selects[i].value), cantidad: parseInt(cants[i].value) || 1 });
+                }
+            }
+            if (nom && cat && precio) {
+                var ids = prods.map(function(p) { return p.id; });
+                var nuevoId = ids.length > 0 ? Math.max.apply(null, ids) + 1 : 1;
+                prods.push({ id: nuevoId, categoria: cat, subcategoria: subcat, nombre: nom, descripcion: desc, precio: precio, stock: stock, imagen: img, esCombo: esCombo, productos: comboProd });
+                limpiarForm();
+                sincronizarStock();
+                actualizarProductos();
+            } else { alert('Completá: Nombre, Categoría y Precio'); }
+        }
+
+        function limpiarForm() {
+            ['nomProd','catProd','subcatProd','descProd','precioProd','stockProd','imgProd'].forEach(function(id) { document.getElementById(id).value = ''; });
+            document.getElementById('esComboProd').checked = false;
+            document.getElementById('comboConfig').style.display = 'none';
+            document.getElementById('comboProductosList').innerHTML = '';
+        }
+
+        function abrirEditar(id) {
+            var prod = prods.find(function(p) { return p.id === id; });
+            if (!prod) return;
+            document.getElementById('editId').value = prod.id;
+            document.getElementById('editNom').value = prod.nombre;
+            document.getElementById('editCat').value = prod.categoria;
+            document.getElementById('editSubcat').value = prod.subcategoria || '';
+            document.getElementById('editDesc').value = prod.descripcion || '';
+            document.getElementById('editPrecio').value = prod.precio;
+            document.getElementById('editStock').value = prod.stock;
+            document.getElementById('editImg').value = prod.imagen || '';
+            document.getElementById('editEsCombo').checked = prod.esCombo || false;
+            editComboTemp = prod.productos ? JSON.parse(JSON.stringify(prod.productos)) : [];
+            toggleEditCombo();
+            cargarEditComboProductos();
+            document.getElementById('modalEditar').style.display = 'flex';
+        }
+
+        function cerrarModal() { document.getElementById('modalEditar').style.display = 'none'; }
+
+        function toggleEditCombo() {
+            document.getElementById('editComboConfig').style.display = document.getElementById('editEsCombo').checked ? 'block' : 'none';
+        }
+
+        function agregarEditComboProducto() {
+            editComboTemp.push({ id: prods.filter(function(p) { return !p.esCombo; })[0]?.id || 1, cantidad: 1 });
+            cargarEditComboProductos();
+        }
+
+        function cargarEditComboProductos() {
+            var div = document.getElementById('editComboProductosList');
+            var html = '';
+            editComboTemp.forEach(function(pr, i) {
+                html += '<div class="combo-item"><select onchange="editComboTemp[' + i + '].id = parseInt(this.value)">';
+                prods.forEach(function(p) { if (!p.esCombo) html += '<option value="' + p.id + '" ' + (p.id === pr.id ? 'selected' : '') + '>' + p.nombre + '</option>'; });
+                html += '</select><input type="number" value="' + pr.cantidad + '" min="1" onchange="editComboTemp[' + i + '].cantidad = parseInt(this.value) || 1"><button class="btn-rojo" onclick="editComboTemp.splice(' + i + ',1);cargarEditComboProductos();">X</button></div>';
+            });
+            div.innerHTML = html;
+        }
+
+        function guardarEdicion() {
+            var id = parseInt(document.getElementById('editId').value);
+            var nom = document.getElementById('editNom').value.trim();
+            var cat = document.getElementById('editCat').value.trim();
+            var subcat = document.getElementById('editSubcat').value.trim();
+            var desc = document.getElementById('editDesc').value.trim();
+            var precio = parseInt(document.getElementById('editPrecio').value);
+            var stock = parseInt(document.getElementById('editStock').value) || 0;
+            var img = document.getElementById('editImg').value.trim();
+            var esCombo = document.getElementById('editEsCombo').checked;
+            if (nom && cat && precio) {
+                var idx = prods.findIndex(function(p) { return p.id === id; });
+                if (idx !== -1) {
+                    prods[idx] = { id: id, categoria: cat, subcategoria: subcat, nombre: nom, descripcion: desc, precio: precio, stock: stock, imagen: img, esCombo: esCombo, productos: esCombo ? editComboTemp : [] };
+                }
+                cerrarModal();
+                sincronizarStock();
+                actualizarProductos();
+                alert('✅ Producto actualizado');
+            } else { alert('Completá: Nombre, Categoría y Precio'); }
+        }
+
+        function eliminarProducto(id) {
+            if (confirm('¿Eliminar este producto?')) { prods = prods.filter(function(p) { return p.id !== id; }); sincronizarStock(); actualizarProductos(); }
+        }
+
+        function filtrar() { actualizarProductos(); }
+
+        function actualizarProductos() {
+            document.getElementById('cantProductos').textContent = prods.length;
+            var container = document.getElementById('listaCategorias');
+            var texto = document.getElementById('buscarProd').value.toLowerCase();
+            
+            var prodsFiltrados = prods;
+            if (texto) {
+                prodsFiltrados = prods.filter(function(p) {
+                    return p.nombre.toLowerCase().includes(texto) || p.categoria.toLowerCase().includes(texto) || (p.subcategoria || '').toLowerCase().includes(texto);
+                });
+            }
+
+            var categorias = [...new Set(prodsFiltrados.map(function(p) { return p.categoria; }))];
+            
+            if (categorias.length === 0) {
+                container.innerHTML = '<div class="sin-resultados">No se encontraron productos</div>';
+                return;
+            }
+
+            var html = '';
+            categorias.forEach(function(cat) {
+                var prodsCat = prodsFiltrados.filter(function(p) { return p.categoria === cat; });
+                var subcats = [...new Set(prodsCat.map(function(p) { return p.subcategoria || 'General'; }))];
+                html += '<div class="categoria-admin abierta">';
+                html += '<div class="categoria-admin-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📌 ' + cat + ' (' + prodsCat.length + ')</div>';
+                html += '<div class="categoria-admin-contenido">';
+                subcats.forEach(function(sub) {
+                    var prodsSub = prodsCat.filter(function(p) { return (p.subcategoria || 'General') === sub; });
+                    html += '<div class="subcategoria-admin abierta">';
+                    html += '<div class="subcategoria-admin-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📎 ' + sub + ' (' + prodsSub.length + ')</div>';
+                    html += '<div class="subcategoria-admin-productos">';
+                    prodsSub.forEach(function(p) {
+                        var stockClass = p.stock > 5 ? 'stock-alto' : (p.stock > 0 ? 'stock-medio' : 'stock-bajo');
+                        var stockText = p.stock > 5 ? 'Stock: ' + p.stock : (p.stock > 0 ? 'Poco: ' + p.stock : 'AGOTADO');
+                        var comboBadge = p.esCombo ? ' <span class="combo-badge">COMBO</span>' : '';
+                        var comboInfo = p.esCombo ? ' | 🎁 ' + p.productos.map(function(pr) { var prod = prods.find(function(x) { return x.id === pr.id; }); return (prod ? prod.nombre : '?') + ' x' + pr.cantidad; }).join(', ') : '';
+                        html += '<div class="producto-item' + (p.esCombo ? ' combo' : '') + '">';
+                        html += '<div class="info"><strong>' + p.nombre + comboBadge + '</strong><small>' + (p.descripcion || 'Sin descripción') + comboInfo + '</small><strong style="color:#e74c3c;">$' + p.precio + '</strong> <span class="stock-badge ' + stockClass + '">' + stockText + '</span></div>';
+                        html += '<div class="acciones"><button class="btn-azul" onclick="abrirEditar(' + p.id + ')">✏️</button><button class="btn-rojo" onclick="eliminarProducto(' + p.id + ')">🗑️</button></div>';
+                        html += '</div>';
+                    });
+                    html += '</div></div>';
+                });
+                html += '</div></div>';
+            });
+            container.innerHTML = html;
+        }
+
+        function agregarBarrio() {
+            var nombre = document.getElementById('nombreBarrio').value.trim();
+            var precio = parseInt(document.getElementById('precioBarrio').value);
+            if (nombre && precio) { barrios.push({ nombre: nombre, precio: precio }); barrios.sort(function(a, b) { return a.nombre.localeCompare(b.nombre); }); document.getElementById('nombreBarrio').value = ''; document.getElementById('precioBarrio').value = ''; actualizarBarrios(); }
+            else { alert('Completá Nombre y Precio'); }
+        }
+
+        function eliminarBarrio(index) { if (confirm('¿Eliminar este barrio?')) { barrios.splice(index, 1); actualizarBarrios(); } }
+
+        function actualizarBarrios() {
+            document.getElementById('cantBarrios').textContent = barrios.length;
+            var html = '';
+            barrios.forEach(function(b, i) { html += '<div class="barrio-item"><div class="info"><strong>📍 ' + b.nombre + '</strong> - <strong style="color:#2980b9;">$' + b.precio + '</strong></div><button class="btn-rojo" onclick="eliminarBarrio(' + i + ')">🗑️</button></div>'; });
+            document.getElementById('listaBarrios').innerHTML = html || '<p style="color:#999;">No hay barrios</p>';
+        }
+
+        function actualizarExport() {
+            var configExport = { nombreLocal: CONFIG.nombreLocal, telefono: CONFIG.telefono, passwordAdmin: CONFIG.passwordAdmin, zonasEnvio: barrios };
+            var prodsExport = prods.map(function(p) { return { id: p.id, categoria: p.categoria, subcategoria: p.subcategoria, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio, stock: p.stock, imagen: p.imagen, esCombo: p.esCombo, productos: p.productos }; });
+            document.getElementById('codigoExport').value = 'const CONFIG = ' + JSON.stringify(configExport, null, 2) + ';\n\nconst PRODUCTOS = ' + JSON.stringify(prodsExport, null, 2) + ';\n\nconst HISTORIAL = [];';
+        }
+
+        function copiarCodigo() { var ta = document.getElementById('codigoExport'); ta.select(); document.execCommand('copy'); alert('✅ Código copiado'); }
+        function descargar() { var blob = new Blob([document.getElementById('codigoExport').value], {type: 'text/javascript'}); var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'config.js'; a.click(); }
+
+        document.getElementById('modalEditar').addEventListener('click', function(e) { if (e.target === this) cerrarModal(); });
+
+        cargarDatos();
+    </script>
+</body>
+</html>
