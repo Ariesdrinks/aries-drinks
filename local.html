@@ -103,36 +103,48 @@
     </div>
     <script src="js/config.js"></script>
     <script>
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxFMyByzmB0z2VbfFcN5oCHqfs3S3fMMd6v8Mlh7uWDWbQ35sQNnDXZvsBIDtcPrb5uZA/exec';
+        
         let carritoLocal = {};
         let stockActual = {};
+        let stockSheet = {};
         let cajaEfectivo = 0;
         let cajaTransferencia = 0;
         let historialLocal = [];
         let pagoSeleccionado = 'efectivo';
 
-        function cargarDatos() {
+        async function cargarStockSheet() {
+            try {
+                var resp = await fetch(SHEET_URL + '?action=leer');
+                stockSheet = await resp.json();
+                for (var id in stockSheet) {
+                    stockActual[id] = stockSheet[id].stock;
+                }
+            } catch(e) {
+                cargarDatosLocales();
+            }
+            guardarDatos();
+        }
+
+        function cargarDatosLocales() {
             var guardado = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}');
             if (guardado.stock && Object.keys(guardado.stock).length > 0) { stockActual = guardado.stock; }
             else { PRODUCTOS.forEach(function(p) { stockActual[p.id] = p.stock || 0; }); }
-            
+        }
+
+        function cargarDatos() {
+            cargarDatosLocales();
             var hoy = new Date().toLocaleDateString();
             var cajaGuardada = JSON.parse(localStorage.getItem('ariesDrinks_caja') || '{}');
-
             if (!cajaGuardada.fecha) {
                 cajaEfectivo = 0;
                 cajaTransferencia = 0;
                 guardarCaja();
-            }
-            else if (cajaGuardada.fecha !== hoy) {
+            } else if (cajaGuardada.fecha !== hoy) {
                 var libroRaw = localStorage.getItem('ariesDrinks_libroCaja');
                 var libro = libroRaw ? JSON.parse(libroRaw) : [];
                 if (cajaGuardada.efectivo > 0 || cajaGuardada.transferencia > 0) {
-                    libro.unshift({
-                        fecha: cajaGuardada.fecha,
-                        efectivo: cajaGuardada.efectivo || 0,
-                        transferencia: cajaGuardada.transferencia || 0,
-                        total: (cajaGuardada.efectivo || 0) + (cajaGuardada.transferencia || 0)
-                    });
+                    libro.unshift({ fecha: cajaGuardada.fecha, efectivo: cajaGuardada.efectivo || 0, transferencia: cajaGuardada.transferencia || 0, total: (cajaGuardada.efectivo || 0) + (cajaGuardada.transferencia || 0) });
                     localStorage.setItem('ariesDrinks_libroCaja', JSON.stringify(libro));
                 }
                 cajaEfectivo = 0;
@@ -140,12 +152,11 @@
                 historialLocal = [];
                 guardarDatos();
                 guardarCaja();
-            }
-            else {
+            } else {
                 cajaEfectivo = cajaGuardada.efectivo || 0;
                 cajaTransferencia = cajaGuardada.transferencia || 0;
             }
-            historialLocal = guardado.historial || [];
+            historialLocal = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}').historial || [];
         }
 
         function guardarDatos() {
@@ -153,22 +164,24 @@
         }
 
         function guardarCaja() {
-            var hoy = new Date().toLocaleDateString();
-            localStorage.setItem('ariesDrinks_caja', JSON.stringify({ fecha: hoy, efectivo: cajaEfectivo, transferencia: cajaTransferencia }));
+            localStorage.setItem('ariesDrinks_caja', JSON.stringify({ fecha: new Date().toLocaleDateString(), efectivo: cajaEfectivo, transferencia: cajaTransferencia }));
+        }
+
+        async function descontarStockSheet(id, cantidad) {
+            try {
+                await fetch(SHEET_URL + '?action=descontar&id=' + id + '&cantidad=' + cantidad);
+            } catch(e) {}
         }
 
         function getStock(id) {
-            var prod = PRODUCTOS.find(function(p) { return p.id === id; });
-            if (prod && prod.esCombo) {
-                var minStock = Infinity;
-                prod.productos.forEach(function(pr) {
-                    var s = stockActual[pr.id] || 0;
-                    var posible = Math.floor(s / pr.cantidad);
-                    if (posible < minStock) minStock = posible;
-                });
-                return Math.min(minStock, prod.stock || Infinity);
-            }
             return stockActual[id] || 0;
+        }
+
+        async function init() {
+            await cargarStockSheet();
+            cargarDatos();
+            cargarProductosVenta();
+            document.getElementById('pagoEfectivoBox').style.display = 'block';
         }
 
         function filtrarProductosLocal() {
@@ -179,12 +192,8 @@
                 var catVisible = false;
                 productos.forEach(function(prod) {
                     var nombre = prod.querySelector('.producto-nombre').textContent.toLowerCase();
-                    if (nombre.includes(texto)) {
-                        prod.style.display = 'flex';
-                        catVisible = true;
-                    } else {
-                        prod.style.display = 'none';
-                    }
+                    if (nombre.includes(texto)) { prod.style.display = 'flex'; catVisible = true; }
+                    else { prod.style.display = 'none'; }
                 });
                 cat.style.display = catVisible ? 'block' : 'none';
                 if (catVisible) cat.classList.add('abierta');
@@ -200,7 +209,6 @@
         }
 
         function cargarProductosVenta() {
-            cargarDatos();
             var container = document.getElementById('productosVenta');
             container.innerHTML = '';
             var categorias = [...new Set(PRODUCTOS.map(function(p) { return p.categoria; }))];
@@ -211,9 +219,9 @@
                 var cont = catDiv.querySelector('.categoria-contenido');
                 var prodsCat = PRODUCTOS.filter(function(p) { return p.categoria === cat; });
                 var subcats = [...new Set(prodsCat.map(function(p) { return p.subcategoria || 'General'; }))];
-                subcats.forEach(function(sub, sIdx) {
+                subcats.forEach(function(sub) {
                     var subDiv = document.createElement('div');
-                    subDiv.className = 'subcategoria' + (sIdx === 0 ? ' abierta' : '');
+                    subDiv.className = 'subcategoria abierta';
                     subDiv.innerHTML = '<div class="subcategoria-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📎 ' + sub + '</div><div class="subcategoria-productos"></div>';
                     var prodDiv = subDiv.querySelector('.subcategoria-productos');
                     prodsCat.filter(function(p) { return (p.subcategoria || 'General') === sub; }).forEach(function(prod) {
@@ -277,17 +285,9 @@
             var codigo = 'L-' + String(Math.floor(Math.random() * 9000) + 1000);
             for (var id in carritoLocal) {
                 if (carritoLocal[id] > 0) {
-                    var p = PRODUCTOS.find(function(x) { return x.id === parseInt(id); });
-                    if (!p) continue;
-                    if (p.esCombo) {
-                        p.productos.forEach(function(pr) {
-                            stockActual[pr.id] = (stockActual[pr.id] || 0) - (carritoLocal[id] * pr.cantidad);
-                            if (stockActual[pr.id] < 0) stockActual[pr.id] = 0;
-                        });
-                    } else {
-                        stockActual[id] = (stockActual[id] || 0) - carritoLocal[id];
-                        if (stockActual[id] < 0) stockActual[id] = 0;
-                    }
+                    stockActual[id] = (stockActual[id] || 0) - carritoLocal[id];
+                    if (stockActual[id] < 0) stockActual[id] = 0;
+                    descontarStockSheet(id, carritoLocal[id]);
                 }
             }
             if (pagoSeleccionado === 'efectivo') { cajaEfectivo += total; } else { cajaTransferencia += total; }
@@ -328,6 +328,7 @@
             ped.productos.forEach(function(pr) {
                 stockActual[pr.id] = (stockActual[pr.id] || 0) - pr.cantidad;
                 if (stockActual[pr.id] < 0) stockActual[pr.id] = 0;
+                descontarStockSheet(pr.id, pr.cantidad);
             });
             if (ped.pago === 'efectivo') { cajaEfectivo += ped.total; } else { cajaTransferencia += ped.total; }
             historialLocal.unshift({ codigo: ped.codigo, tipo: 'delivery', fecha: new Date().toLocaleString(), cliente: ped.cliente, total: ped.total, pago: ped.pago, productos: ped.productos });
@@ -351,41 +352,27 @@
             var html = '';
             historialLocal.slice(0, 20).forEach(function(h) { html += '<div class="historial-item"><span>#' + h.codigo + ' | ' + (h.tipo === 'local' ? '🏠' : '🛵') + ' | ' + (h.pago === 'efectivo' ? '💵' : '🏦') + '</span><strong>$' + h.total + '</strong></div>'; });
             div.innerHTML = html;
-
             var libroRaw = localStorage.getItem('ariesDrinks_libroCaja');
             var libro = libroRaw ? JSON.parse(libroRaw) : [];
             var libroDiv = document.getElementById('listaLibroCaja');
-            if (!libro || libro.length === 0) {
-                libroDiv.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">Sin registros anteriores</p>';
-            } else {
-                var libroHtml = '';
-                libro.slice(0, 10).forEach(function(d) {
-                    libroHtml += '<div class="historial-item"><span>📅 ' + d.fecha + '</span><span>💵 $' + d.efectivo + ' | 🏦 $' + d.transferencia + ' | <strong>$' + d.total + '</strong></span></div>';
-                });
-                libroDiv.innerHTML = libroHtml;
-            }
+            if (!libro || libro.length === 0) { libroDiv.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">Sin registros anteriores</p>'; }
+            else { var libroHtml = ''; libro.slice(0, 10).forEach(function(d) { libroHtml += '<div class="historial-item"><span>📅 ' + d.fecha + '</span><span>💵 $' + d.efectivo + ' | 🏦 $' + d.transferencia + ' | <strong>$' + d.total + '</strong></span></div>'; }); libroDiv.innerHTML = libroHtml; }
         }
 
         function reiniciarCaja() {
-            if (confirm('¿Forzar nuevo día? Se guardará el día actual en el libro y la caja volverá a $0.')) {
+            if (confirm('¿Forzar nuevo día?')) {
                 var hoy = new Date().toLocaleDateString();
                 var libroRaw = localStorage.getItem('ariesDrinks_libroCaja');
                 var libro = libroRaw ? JSON.parse(libroRaw) : [];
                 libro.unshift({ fecha: hoy, efectivo: cajaEfectivo, transferencia: cajaTransferencia, total: cajaEfectivo + cajaTransferencia });
                 localStorage.setItem('ariesDrinks_libroCaja', JSON.stringify(libro));
-                cajaEfectivo = 0;
-                cajaTransferencia = 0;
-                historialLocal = [];
-                guardarDatos();
-                guardarCaja();
-                actualizarCaja();
-                alert('✅ Caja reiniciada. Día guardado en el libro.');
+                cajaEfectivo = 0; cajaTransferencia = 0; historialLocal = [];
+                guardarDatos(); guardarCaja(); actualizarCaja();
+                alert('✅ Caja reiniciada.');
             }
         }
 
-        cargarDatos();
-        cargarProductosVenta();
-        document.getElementById('pagoEfectivoBox').style.display = 'block';
+        init();
     </script>
 </body>
 </html>

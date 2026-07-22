@@ -29,7 +29,6 @@
         .btn-gris { background: #95a5a6; }
         .btn-rojo { background: #c0392b; padding: 5px 12px; font-size: 12px; }
         .btn-naranja { background: #e67e22; padding: 5px 12px; font-size: 12px; }
-
         .categoria-admin { background: #f9f9f9; margin-bottom: 8px; border-radius: 10px; overflow: hidden; }
         .categoria-admin-titulo { background: #e74c3c; color: white; padding: 12px 15px; font-size: 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
         .categoria-admin.abierta .categoria-admin-contenido { display: block; }
@@ -38,7 +37,6 @@
         .subcategoria-admin-titulo { background: #fdf2f2; padding: 10px 15px; font-size: 14px; font-weight: bold; color: #c0392b; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         .subcategoria-admin.abierta .subcategoria-admin-productos { display: block; }
         .subcategoria-admin-productos { display: none; padding: 5px 10px; }
-
         .producto-item { background: white; padding: 10px; margin: 4px 0; border-radius: 8px; border-left: 4px solid #e74c3c; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
         .producto-item.combo { border-left-color: #f39c12; }
         .producto-item .info { flex: 1; min-width: 180px; }
@@ -50,7 +48,6 @@
         .stock-medio { background: #fff3cd; color: #856404; }
         .stock-bajo { background: #f8d7da; color: #721c24; }
         .combo-badge { background: #f39c12; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; }
-
         .barrio-item { background: #f0f8ff; padding: 10px 15px; margin: 5px 0; border-radius: 8px; border-left: 4px solid #2980b9; display: flex; justify-content: space-between; align-items: center; }
         textarea { width: 100%; height: 200px; font-family: monospace; margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 12px; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
@@ -84,7 +81,7 @@
             <img src="img/logo.jpeg" alt="Aries Drinks" onerror="this.style.display='none'">
         </div>
         <h2>📊 Panel de Administración</h2>
-        <div class="aviso-sync">✅ Stock sincronizado con Local y Delivery</div>
+        <div class="aviso-sync">✅ Stock sincronizado con Google Sheets</div>
         
         <div class="tabs">
             <button class="tab activa" onclick="cambiarTab('productos')">📦 Productos</button>
@@ -183,22 +180,25 @@
 
     <script src="js/config.js"></script>
     <script>
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxFMyByzmB0z2VbfFcN5oCHqfs3S3fMMd6v8Mlh7uWDWbQ35sQNnDXZvsBIDtcPrb5uZA/exec';
+        
         let prods = [];
         let barrios = [];
         let editComboTemp = [];
 
-        function cargarDatos() {
-            var guardado = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}');
-            if (guardado.stock && Object.keys(guardado.stock).length > 0) {
+        async function cargarDatos() {
+            try {
+                var resp = await fetch(SHEET_URL + '?action=leer');
+                var data = await resp.json();
                 prods = PRODUCTOS.map(function(p) {
                     return {
                         id: p.id || 0, categoria: p.categoria || "", subcategoria: p.subcategoria || "",
                         nombre: p.nombre || "", descripcion: p.descripcion || "", precio: p.precio || 0,
-                        stock: guardado.stock[p.id] !== undefined ? guardado.stock[p.id] : (p.stock || 0),
+                        stock: data[p.id] ? data[p.id].stock : (p.stock || 0),
                         imagen: p.imagen || "", esCombo: p.esCombo || false, productos: p.productos || []
                     };
                 });
-            } else {
+            } catch(e) {
                 prods = PRODUCTOS.map(function(p) {
                     return {
                         id: p.id || 0, categoria: p.categoria || "", subcategoria: p.subcategoria || "",
@@ -206,17 +206,14 @@
                         stock: p.stock || 0, imagen: p.imagen || "", esCombo: p.esCombo || false, productos: p.productos || []
                     };
                 });
-                sincronizarStock();
             }
             barrios = CONFIG.zonasEnvio.map(function(b) { return { nombre: b.nombre, precio: b.precio }; });
         }
 
-        function sincronizarStock() {
-            var stockData = {};
-            prods.forEach(function(p) { stockData[p.id] = p.stock; });
-            var guardado = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}');
-            guardado.stock = stockData;
-            localStorage.setItem('ariesDrinks_data', JSON.stringify(guardado));
+        async function sincronizarStock(id, stock) {
+            try {
+                await fetch(SHEET_URL + '?action=actualizar&id=' + id + '&stock=' + stock);
+            } catch(e) {}
         }
 
         function cambiarTab(tab) {
@@ -231,9 +228,7 @@
             if (document.getElementById('passInput').value === CONFIG.passwordAdmin) {
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('adminScreen').style.display = 'block';
-                cargarDatos();
-                actualizarProductos();
-                actualizarBarrios();
+                init();
             } else { document.getElementById('error').style.display = 'block'; }
         }
 
@@ -242,6 +237,12 @@
             document.getElementById('adminScreen').style.display = 'none';
             document.getElementById('passInput').value = '';
             document.getElementById('error').style.display = 'none';
+        }
+
+        async function init() {
+            await cargarDatos();
+            actualizarProductos();
+            actualizarBarrios();
         }
 
         function toggleComboConfig() {
@@ -277,8 +278,8 @@
                 var ids = prods.map(function(p) { return p.id; });
                 var nuevoId = ids.length > 0 ? Math.max.apply(null, ids) + 1 : 1;
                 prods.push({ id: nuevoId, categoria: cat, subcategoria: subcat, nombre: nom, descripcion: desc, precio: precio, stock: stock, imagen: img, esCombo: esCombo, productos: comboProd });
+                sincronizarStock(nuevoId, stock);
                 limpiarForm();
-                sincronizarStock();
                 actualizarProductos();
             } else { alert('Completá: Nombre, Categoría y Precio'); }
         }
@@ -345,15 +346,15 @@
                 if (idx !== -1) {
                     prods[idx] = { id: id, categoria: cat, subcategoria: subcat, nombre: nom, descripcion: desc, precio: precio, stock: stock, imagen: img, esCombo: esCombo, productos: esCombo ? editComboTemp : [] };
                 }
+                sincronizarStock(id, stock);
                 cerrarModal();
-                sincronizarStock();
                 actualizarProductos();
-                alert('✅ Producto actualizado');
+                alert('✅ Producto actualizado y sincronizado con Google Sheets');
             } else { alert('Completá: Nombre, Categoría y Precio'); }
         }
 
         function eliminarProducto(id) {
-            if (confirm('¿Eliminar este producto?')) { prods = prods.filter(function(p) { return p.id !== id; }); sincronizarStock(); actualizarProductos(); }
+            if (confirm('¿Eliminar este producto?')) { prods = prods.filter(function(p) { return p.id !== id; }); actualizarProductos(); }
         }
 
         function filtrar() { actualizarProductos(); }
@@ -362,42 +363,22 @@
             document.getElementById('cantProductos').textContent = prods.length;
             var container = document.getElementById('listaCategorias');
             var texto = document.getElementById('buscarProd').value.toLowerCase();
-            
-            var prodsFiltrados = prods;
-            if (texto) {
-                prodsFiltrados = prods.filter(function(p) {
-                    return p.nombre.toLowerCase().includes(texto) || p.categoria.toLowerCase().includes(texto) || (p.subcategoria || '').toLowerCase().includes(texto);
-                });
-            }
-
+            var prodsFiltrados = texto ? prods.filter(function(p) { return p.nombre.toLowerCase().includes(texto) || p.categoria.toLowerCase().includes(texto) || (p.subcategoria || '').toLowerCase().includes(texto); }) : prods;
             var categorias = [...new Set(prodsFiltrados.map(function(p) { return p.categoria; }))];
-            
-            if (categorias.length === 0) {
-                container.innerHTML = '<div class="sin-resultados">No se encontraron productos</div>';
-                return;
-            }
-
+            if (categorias.length === 0) { container.innerHTML = '<div class="sin-resultados">No se encontraron productos</div>'; return; }
             var html = '';
             categorias.forEach(function(cat) {
                 var prodsCat = prodsFiltrados.filter(function(p) { return p.categoria === cat; });
                 var subcats = [...new Set(prodsCat.map(function(p) { return p.subcategoria || 'General'; }))];
-                html += '<div class="categoria-admin abierta">';
-                html += '<div class="categoria-admin-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📌 ' + cat + ' (' + prodsCat.length + ')</div>';
-                html += '<div class="categoria-admin-contenido">';
+                html += '<div class="categoria-admin abierta"><div class="categoria-admin-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📌 ' + cat + ' (' + prodsCat.length + ')</div><div class="categoria-admin-contenido">';
                 subcats.forEach(function(sub) {
                     var prodsSub = prodsCat.filter(function(p) { return (p.subcategoria || 'General') === sub; });
-                    html += '<div class="subcategoria-admin abierta">';
-                    html += '<div class="subcategoria-admin-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📎 ' + sub + ' (' + prodsSub.length + ')</div>';
-                    html += '<div class="subcategoria-admin-productos">';
+                    html += '<div class="subcategoria-admin abierta"><div class="subcategoria-admin-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📎 ' + sub + ' (' + prodsSub.length + ')</div><div class="subcategoria-admin-productos">';
                     prodsSub.forEach(function(p) {
                         var stockClass = p.stock > 5 ? 'stock-alto' : (p.stock > 0 ? 'stock-medio' : 'stock-bajo');
                         var stockText = p.stock > 5 ? 'Stock: ' + p.stock : (p.stock > 0 ? 'Poco: ' + p.stock : 'AGOTADO');
                         var comboBadge = p.esCombo ? ' <span class="combo-badge">COMBO</span>' : '';
-                        var comboInfo = p.esCombo ? ' | 🎁 ' + p.productos.map(function(pr) { var prod = prods.find(function(x) { return x.id === pr.id; }); return (prod ? prod.nombre : '?') + ' x' + pr.cantidad; }).join(', ') : '';
-                        html += '<div class="producto-item' + (p.esCombo ? ' combo' : '') + '">';
-                        html += '<div class="info"><strong>' + p.nombre + comboBadge + '</strong><small>' + (p.descripcion || 'Sin descripción') + comboInfo + '</small><strong style="color:#e74c3c;">$' + p.precio + '</strong> <span class="stock-badge ' + stockClass + '">' + stockText + '</span></div>';
-                        html += '<div class="acciones"><button class="btn-azul" onclick="abrirEditar(' + p.id + ')">✏️</button><button class="btn-rojo" onclick="eliminarProducto(' + p.id + ')">🗑️</button></div>';
-                        html += '</div>';
+                        html += '<div class="producto-item' + (p.esCombo ? ' combo' : '') + '"><div class="info"><strong>' + p.nombre + comboBadge + '</strong><small>' + (p.descripcion || 'Sin descripción') + '</small><strong style="color:#e74c3c;">$' + p.precio + '</strong> <span class="stock-badge ' + stockClass + '">' + stockText + '</span></div><div class="acciones"><button class="btn-azul" onclick="abrirEditar(' + p.id + ')">✏️</button><button class="btn-rojo" onclick="eliminarProducto(' + p.id + ')">🗑️</button></div></div>';
                     });
                     html += '</div></div>';
                 });
@@ -432,8 +413,6 @@
         function descargar() { var blob = new Blob([document.getElementById('codigoExport').value], {type: 'text/javascript'}); var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'config.js'; a.click(); }
 
         document.getElementById('modalEditar').addEventListener('click', function(e) { if (e.target === this) cerrarModal(); });
-
-        cargarDatos();
     </script>
 </body>
 </html>

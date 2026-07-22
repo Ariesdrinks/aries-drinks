@@ -86,32 +86,28 @@
     </div>
     <script src="js/config.js"></script>
     <script>
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxFMyByzmB0z2VbfFcN5oCHqfs3S3fMMd6v8Mlh7uWDWbQ35sQNnDXZvsBIDtcPrb5uZA/exec';
+        
         document.getElementById('nombreLocal').textContent = CONFIG.nombreLocal;
         let carrito = {};
         let stockActual = {};
 
-        function cargarStockCompartido() {
-            var guardado = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}');
-            if (guardado.stock && Object.keys(guardado.stock).length > 0) { stockActual = guardado.stock; }
-            else { PRODUCTOS.forEach(function(p) { stockActual[p.id] = p.stock || 0; }); }
+        async function cargarStockSheet() {
+            try {
+                var resp = await fetch(SHEET_URL + '?action=leer');
+                var data = await resp.json();
+                for (var id in data) { stockActual[id] = data[id].stock; }
+            } catch(e) {
+                PRODUCTOS.forEach(function(p) { stockActual[p.id] = p.stock || 0; });
+            }
         }
 
         function getStock(id) {
-            var prod = PRODUCTOS.find(function(p) { return p.id === id; });
-            if (prod && prod.esCombo) {
-                var minStock = Infinity;
-                prod.productos.forEach(function(pr) {
-                    var s = stockActual[pr.id] || 0;
-                    var posible = Math.floor(s / pr.cantidad);
-                    if (posible < minStock) minStock = posible;
-                });
-                return Math.min(minStock, prod.stock || Infinity);
-            }
             return stockActual[id] || 0;
         }
 
-        function cargarProductos() {
-            cargarStockCompartido();
+        async function cargarProductos() {
+            await cargarStockSheet();
             var container = document.getElementById('productosContainer');
             container.innerHTML = '';
             var categorias = [...new Set(PRODUCTOS.map(p => p.categoria))];
@@ -122,9 +118,9 @@
                 var cont = catDiv.querySelector('.categoria-contenido');
                 var prodsCat = PRODUCTOS.filter(p => p.categoria === cat);
                 var subcats = [...new Set(prodsCat.map(p => p.subcategoria || 'General'))];
-                subcats.forEach((sub, sIdx) => {
+                subcats.forEach((sub) => {
                     var subDiv = document.createElement('div');
-                    subDiv.className = 'subcategoria' + (sIdx === 0 ? ' abierta' : '');
+                    subDiv.className = 'subcategoria abierta';
                     subDiv.innerHTML = '<div class="subcategoria-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📎 ' + sub + '</div><div class="subcategoria-productos"></div>';
                     var prodDiv = subDiv.querySelector('.subcategoria-productos');
                     prodsCat.filter(p => (p.subcategoria || 'General') === sub).forEach(prod => {
@@ -232,10 +228,7 @@
             var pendientes = JSON.parse(localStorage.getItem('pendientesDelivery') || '[]');
             var maxCod = 0;
             pendientes.forEach(function(p) { if (p.codigo && p.codigo.startsWith('AR-')) { var n = parseInt(p.codigo.split('-')[1]); if (n > maxCod) maxCod = n; } });
-            var guardado = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}');
-            if (guardado.proximoCodigo && guardado.proximoCodigo > maxCod) maxCod = guardado.proximoCodigo;
             var codigo = 'AR-' + String(maxCod + 1).padStart(3, '0');
-
             var productosFinal = [], subt = 0;
             for (var id in carrito) {
                 if (carrito[id] > 0) {
