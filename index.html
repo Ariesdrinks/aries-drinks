@@ -29,7 +29,6 @@
         .stock-disponible { background: #d4edda; color: #155724; }
         .stock-bajo { background: #fff3cd; color: #856404; }
         .stock-agotado { background: #f8d7da; color: #721c24; }
-        .combo-badge { background: #f39c12; color: white; font-size: 10px; padding: 2px 6px; border-radius: 8px; margin-left: 5px; }
         .cantidad-control { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
         .btn-cant { background: #e74c3c; color: white; border: none; width: 26px; height: 26px; border-radius: 50%; font-size: 15px; cursor: pointer; }
         .btn-cant:disabled { background: #ccc; }
@@ -86,20 +85,28 @@
     </div>
     <script src="js/config.js"></script>
     <script>
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxFMyByzmB0z2VbfFcN5oCHqfs3S3fMMd6v8Mlh7uWDWbQ35sQNnDXZvsBIDtcPrb5uZA/exec';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzcZRKmUEQikaxq3vfrdeeDNsyk_f-ZhWvY-El_VJCpX_tRErtBGfYZ1ibtX6auP0VS6A/exec';
         
         document.getElementById('nombreLocal').textContent = CONFIG.nombreLocal;
         let carrito = {};
+        let productosSheet = [];
         let stockActual = {};
 
-        async function cargarStockSheet() {
+        async function cargarDatosSheet() {
             try {
                 var resp = await fetch(SHEET_URL + '?action=leer');
-                var data = await resp.json();
-                for (var id in data) { stockActual[id] = data[id].stock; }
+                productosSheet = await resp.json();
+                productosSheet.forEach(function(p) {
+                    stockActual[p.id] = p.stock;
+                });
             } catch(e) {
                 PRODUCTOS.forEach(function(p) { stockActual[p.id] = p.stock || 0; });
+                productosSheet = PRODUCTOS;
             }
+        }
+
+        function getProducto(id) {
+            return productosSheet.find(function(p) { return p.id == id; });
         }
 
         function getStock(id) {
@@ -107,16 +114,16 @@
         }
 
         async function cargarProductos() {
-            await cargarStockSheet();
+            await cargarDatosSheet();
             var container = document.getElementById('productosContainer');
             container.innerHTML = '';
-            var categorias = [...new Set(PRODUCTOS.map(p => p.categoria))];
+            var categorias = [...new Set(productosSheet.map(p => p.categoria))];
             categorias.forEach((cat, idx) => {
                 var catDiv = document.createElement('div');
                 catDiv.className = 'categoria' + (idx === 0 ? ' abierta' : '');
                 catDiv.innerHTML = '<div class="categoria-titulo" onclick="this.parentElement.classList.toggle(\'abierta\')">📌 ' + cat + '</div><div class="categoria-contenido"></div>';
                 var cont = catDiv.querySelector('.categoria-contenido');
-                var prodsCat = PRODUCTOS.filter(p => p.categoria === cat);
+                var prodsCat = productosSheet.filter(p => p.categoria === cat);
                 var subcats = [...new Set(prodsCat.map(p => p.subcategoria || 'General'))];
                 subcats.forEach((sub) => {
                     var subDiv = document.createElement('div');
@@ -128,11 +135,10 @@
                         var agotado = stock === 0;
                         var stockClass = stock > 3 ? 'stock-disponible' : (stock > 0 ? 'stock-bajo' : 'stock-agotado');
                         var stockText = stock > 3 ? 'Stock: ' + stock : (stock > 0 ? '¡Últimas ' + stock + '!' : 'AGOTADO');
-                        var comboBadge = prod.esCombo ? '<span class="combo-badge">COMBO</span>' : '';
                         var imgSrc = (prod.imagen && prod.imagen.trim() !== '') ? prod.imagen : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" fill="%23ddd"><rect width="50" height="50"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="22">🍽️</text></svg>';
                         prodDiv.innerHTML += '<div class="producto' + (agotado ? ' agotado' : '') + '">' +
                             '<img class="producto-img" src="' + imgSrc + '" alt="' + prod.nombre + '" onerror="this.style.display=\'none\'">' +
-                            '<div class="producto-info"><div class="producto-nombre">' + prod.nombre + comboBadge + '</div>' +
+                            '<div class="producto-info"><div class="producto-nombre">' + prod.nombre + '</div>' +
                             (prod.descripcion ? '<div class="producto-descripcion">' + prod.descripcion + '</div>' : '') +
                             '<div class="producto-precio">$' + prod.precio + ' <span class="producto-stock ' + stockClass + '">' + stockText + '</span></div></div>' +
                             '<div class="cantidad-control"><button class="btn-cant" onclick="cambiarCant(' + prod.id + ',-1)" ' + (agotado ? 'disabled' : '') + '>-</button>' +
@@ -165,7 +171,7 @@
             var total = 0, html = '', items = 0;
             for (var id in carrito) {
                 if (carrito[id] > 0) {
-                    var prod = PRODUCTOS.find(p => p.id === parseInt(id));
+                    var prod = getProducto(parseInt(id));
                     if (!prod) continue;
                     total += prod.precio * carrito[id];
                     items += carrito[id];
@@ -176,9 +182,7 @@
             var envio = getEnvioActual();
             var totalConEnvio = total + envio;
             document.getElementById('totalCarrito').textContent = totalConEnvio;
-            var envioLinea = document.getElementById('envioLinea');
-            if (envio > 0 && items > 0) { envioLinea.textContent = 'Productos: $' + total + ' + Envío: $' + envio; }
-            else { envioLinea.textContent = ''; }
+            document.getElementById('envioLinea').textContent = (envio > 0 && items > 0) ? 'Productos: $' + total + ' + Envío: $' + envio : '';
             validar();
         }
 
@@ -195,8 +199,8 @@
 
         document.getElementById('montoPago').addEventListener('input', function() {
             var total = parseInt(document.getElementById('totalCarrito').textContent);
-            var pago = parseInt(this.value) || 0, vuelto = pago - total;
-            document.getElementById('vueltoCalculado').innerHTML = pago > 0 ? (vuelto >= 0 ? '<strong style="color:green">Vuelto: $' + vuelto + '</strong>' : '<strong style="color:red">Falta dinero</strong>') : '';
+            var pago = parseInt(this.value) || 0;
+            document.getElementById('vueltoCalculado').innerHTML = pago > 0 ? (pago >= total ? '<strong style="color:green">Vuelto: $' + (pago - total) + '</strong>' : '<strong style="color:red">Falta dinero</strong>') : '';
             validar();
         });
 
@@ -232,19 +236,10 @@
             var productosFinal = [], subt = 0;
             for (var id in carrito) {
                 if (carrito[id] > 0) {
-                    var p = PRODUCTOS.find(x => x.id === parseInt(id));
+                    var p = getProducto(parseInt(id));
                     if (!p) continue;
-                    if (p.esCombo) {
-                        p.productos.forEach(function(pr) {
-                            var prodReal = PRODUCTOS.find(x => x.id === pr.id);
-                            if (prodReal) productosFinal.push({ id: prodReal.id, nombre: prodReal.nombre, cantidad: carrito[id] * pr.cantidad, precio: 0 });
-                        });
-                        productosFinal.push({ id: p.id, nombre: '🎁 ' + p.nombre, cantidad: carrito[id], precio: p.precio });
-                        subt += p.precio * carrito[id];
-                    } else {
-                        productosFinal.push({ id: p.id, nombre: p.nombre, cantidad: carrito[id], precio: p.precio });
-                        subt += p.precio * carrito[id];
-                    }
+                    productosFinal.push({ id: p.id, nombre: p.nombre, cantidad: carrito[id], precio: p.precio });
+                    subt += p.precio * carrito[id];
                 }
             }
             var env = parseInt(parts[0]), total = subt + env;
@@ -252,7 +247,7 @@
             var obs = document.getElementById('observaciones').value.trim();
             if (obs) msg += '📝 *Obs:* ' + obs + '\n';
             msg += '\n📋 *PEDIDO:*\n';
-            productosFinal.forEach(function(pr) { if (pr.precio > 0) msg += '- ' + pr.cantidad + 'x ' + pr.nombre + ': $' + (pr.precio * pr.cantidad) + '\n'; });
+            productosFinal.forEach(function(pr) { msg += '- ' + pr.cantidad + 'x ' + pr.nombre + ': $' + (pr.precio * pr.cantidad) + '\n'; });
             msg += '\n💰 Subtotal: $' + subt + '\n🚚 Envío: $' + env + '\n💵 *TOTAL: $' + total + '*\n💳 *Pago:* ' + (document.querySelector('input[name="pago"]:checked').value === 'efectivo' ? 'Efectivo' : 'Transferencia');
             if (document.querySelector('input[name="pago"]:checked').value === 'efectivo') { var monto = document.getElementById('montoPago').value; msg += '\n💵 Paga con: $' + monto + '\n🔄 Vuelto: $' + (monto - total); }
             msg += '\n\n⚠️ *Pendiente de confirmación*';
