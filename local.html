@@ -55,6 +55,7 @@
         .caja-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
         .caja-total { font-size: 20px; font-weight: bold; text-align: right; padding: 10px; }
         .historial-item { padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; display: flex; justify-content: space-between; }
+        .detalle-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed #eee; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -74,7 +75,13 @@
                 <input type="text" id="buscarProdLocal" placeholder="🔍 Buscar producto..." oninput="filtrarProductosLocal()">
             </div>
             <div id="productosVenta"></div>
-            <div class="box"><h3>🛒 TOTAL</h3><div class="total-grande">$<span id="totalVenta">0</span></div></div>
+            <div class="box">
+                <h3>🛒 DETALLE DE VENTA</h3>
+                <div id="detalleVenta" style="margin-bottom:10px;">
+                    <p style="color:#999;text-align:center;padding:10px;">Sin productos</p>
+                </div>
+                <div class="total-grande">Total: $<span id="totalVenta">0</span></div>
+            </div>
             <div class="box">
                 <h3>💳 MEDIO DE PAGO</h3>
                 <label class="pago-opcion seleccionado" onclick="seleccionarPago('efectivo', this)"><input type="radio" name="pagoLocal" value="efectivo" checked> 💵 Efectivo</label>
@@ -116,19 +123,14 @@
             try {
                 var resp = await fetch(SHEET_URL + '?action=leer');
                 productosSheet = await resp.json();
-                productosSheet.forEach(function(p) {
-                    stockActual[p.id] = p.stock;
-                });
+                productosSheet.forEach(function(p) { stockActual[p.id] = p.stock; });
             } catch(e) {
                 PRODUCTOS.forEach(function(p) { stockActual[p.id] = p.stock || 0; });
                 productosSheet = PRODUCTOS;
             }
         }
 
-        function getProducto(id) {
-            return productosSheet.find(function(p) { return p.id == id; });
-        }
-
+        function getProducto(id) { return productosSheet.find(function(p) { return p.id == id; }); }
         function getStock(id) { return stockActual[id] || 0; }
 
         function cargarDatos() {
@@ -229,7 +231,20 @@
 
         function actualizarTotalVenta() {
             var total = 0;
-            for (var id in carritoLocal) { if (carritoLocal[id] > 0) { var prod = getProducto(parseInt(id)); if (prod) total += prod.precio * carritoLocal[id]; } }
+            var detalleDiv = document.getElementById('detalleVenta');
+            var html = '';
+            var items = 0;
+            for (var id in carritoLocal) {
+                if (carritoLocal[id] > 0) {
+                    var prod = getProducto(parseInt(id));
+                    if (!prod) continue;
+                    var subtotal = prod.precio * carritoLocal[id];
+                    total += subtotal;
+                    items += carritoLocal[id];
+                    html += '<div class="detalle-item"><span>' + carritoLocal[id] + 'x ' + prod.nombre + '</span><span>$' + subtotal + '</span></div>';
+                }
+            }
+            detalleDiv.innerHTML = items === 0 ? '<p style="color:#999;text-align:center;padding:10px;">Sin productos</p>' : html;
             document.getElementById('totalVenta').textContent = total;
             document.getElementById('btnCobrar').disabled = total === 0;
             calcularVuelto();
@@ -274,6 +289,7 @@
             historialLocal.unshift(venta);
             guardarCaja();
             carritoLocal = {};
+            document.getElementById('detalleVenta').innerHTML = '<p style="color:#999;text-align:center;padding:10px;">Sin productos</p>';
             document.getElementById('totalVenta').textContent = '0';
             document.getElementById('montoPagoLocal').value = '';
             document.getElementById('vueltoLocal').innerHTML = 'Vuelto: $0';
