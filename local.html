@@ -101,15 +101,15 @@
             </div>
             <div class="box"><h3>📋 ÚLTIMAS VENTAS</h3><div id="listaHistorial"><p style="color:#999;text-align:center;padding:20px;">Sin ventas</p></div></div>
             <div class="box" style="margin-top:10px;">
-                <h3>📚 LIBRO DE CAJA (DÍAS ANTERIORES)</h3>
-                <div id="listaLibroCaja"><p style="color:#999;text-align:center;padding:10px;">Sin registros anteriores</p></div>
+                <h3>📚 LIBRO DE CAJA (NUBE)</h3>
+                <div id="listaLibroCaja"><p style="color:#999;text-align:center;padding:10px;">Cargando...</p></div>
             </div>
             <button class="btn-accion btn-rojo" style="padding:12px;" onclick="reiniciarCaja()">🔄 REINICIAR CAJA (Forzar nuevo día)</button>
         </div>
     </div>
     <script src="js/config.js"></script>
     <script>
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzcZRKmUEQikaxq3vfrdeeDNsyk_f-ZhWvY-El_VJCpX_tRErtBGfYZ1ibtX6auP0VS6A/exec';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwq-AgewPBm93mXS-vhbRApJMcpoyFt8jsz8XM-XzfFq-E2_Qri1AgLy7JYRESLpEbc1w/exec';
         
         let carritoLocal = {};
         let productosSheet = [];
@@ -118,6 +118,7 @@
         let cajaTransferencia = 0;
         let historialLocal = [];
         let pagoSeleccionado = 'efectivo';
+        let libroCajaNube = [];
 
         async function cargarDatosSheet() {
             try {
@@ -130,6 +131,22 @@
             }
         }
 
+        async function cargarLibroCajaNube() {
+            try {
+                var resp = await fetch(SHEET_URL + '?action=leerCaja');
+                libroCajaNube = await resp.json();
+            } catch(e) {
+                libroCajaNube = [];
+            }
+        }
+
+        async function guardarCajaEnNube(fecha, efectivo, transferencia, tipo) {
+            try {
+                await fetch(SHEET_URL + '?action=guardarCaja&fecha=' + encodeURIComponent(fecha) + '&efectivo=' + efectivo + '&transferencia=' + transferencia + '&tipo=' + tipo);
+                await cargarLibroCajaNube();
+            } catch(e) {}
+        }
+
         function getProducto(id) { return productosSheet.find(function(p) { return p.id == id; }); }
         function getStock(id) { return stockActual[id] || 0; }
 
@@ -138,11 +155,8 @@
             var cajaGuardada = JSON.parse(localStorage.getItem('ariesDrinks_caja') || '{}');
             if (!cajaGuardada.fecha) { cajaEfectivo = 0; cajaTransferencia = 0; guardarCaja(); }
             else if (cajaGuardada.fecha !== hoy) {
-                var libroRaw = localStorage.getItem('ariesDrinks_libroCaja');
-                var libro = libroRaw ? JSON.parse(libroRaw) : [];
                 if (cajaGuardada.efectivo > 0 || cajaGuardada.transferencia > 0) {
-                    libro.unshift({ fecha: cajaGuardada.fecha, efectivo: cajaGuardada.efectivo || 0, transferencia: cajaGuardada.transferencia || 0, total: (cajaGuardada.efectivo || 0) + (cajaGuardada.transferencia || 0) });
-                    localStorage.setItem('ariesDrinks_libroCaja', JSON.stringify(libro));
+                    guardarCajaEnNube(cajaGuardada.fecha, cajaGuardada.efectivo || 0, cajaGuardada.transferencia || 0, 'cierre');
                 }
                 cajaEfectivo = 0; cajaTransferencia = 0; historialLocal = [];
                 guardarCaja();
@@ -160,6 +174,7 @@
 
         async function init() {
             await cargarDatosSheet();
+            await cargarLibroCajaNube();
             cargarDatos();
             cargarProductosVenta();
             document.getElementById('pagoEfectivoBox').style.display = 'block';
@@ -344,23 +359,26 @@
             var html = '';
             historialLocal.slice(0, 20).forEach(function(h) { html += '<div class="historial-item"><span>#' + h.codigo + ' | ' + (h.tipo === 'local' ? '🏠' : '🛵') + ' | ' + (h.pago === 'efectivo' ? '💵' : '🏦') + '</span><strong>$' + h.total + '</strong></div>'; });
             div.innerHTML = html;
-            var libroRaw = localStorage.getItem('ariesDrinks_libroCaja');
-            var libro = libroRaw ? JSON.parse(libroRaw) : [];
+
             var libroDiv = document.getElementById('listaLibroCaja');
-            if (!libro || libro.length === 0) { libroDiv.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">Sin registros anteriores</p>'; }
-            else { var libroHtml = ''; libro.slice(0, 10).forEach(function(d) { libroHtml += '<div class="historial-item"><span>📅 ' + d.fecha + '</span><span>💵 $' + d.efectivo + ' | 🏦 $' + d.transferencia + ' | <strong>$' + d.total + '</strong></span></div>'; }); libroDiv.innerHTML = libroHtml; }
+            if (!libroCajaNube || libroCajaNube.length === 0) {
+                libroDiv.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">Sin registros en la nube</p>';
+            } else {
+                var libroHtml = '';
+                libroCajaNube.slice(0, 10).forEach(function(d) {
+                    libroHtml += '<div class="historial-item"><span>📅 ' + d.fecha + '</span><span>💵 $' + d.efectivo + ' | 🏦 $' + d.transferencia + ' | <strong>$' + d.total + '</strong></span></div>';
+                });
+                libroDiv.innerHTML = libroHtml;
+            }
         }
 
-        function reiniciarCaja() {
-            if (confirm('¿Forzar nuevo día?')) {
+        async function reiniciarCaja() {
+            if (confirm('¿Forzar nuevo día? Se guardará en la nube.')) {
                 var hoy = new Date().toLocaleDateString();
-                var libroRaw = localStorage.getItem('ariesDrinks_libroCaja');
-                var libro = libroRaw ? JSON.parse(libroRaw) : [];
-                libro.unshift({ fecha: hoy, efectivo: cajaEfectivo, transferencia: cajaTransferencia, total: cajaEfectivo + cajaTransferencia });
-                localStorage.setItem('ariesDrinks_libroCaja', JSON.stringify(libro));
+                await guardarCajaEnNube(hoy, cajaEfectivo, cajaTransferencia, 'cierre');
                 cajaEfectivo = 0; cajaTransferencia = 0; historialLocal = [];
                 guardarCaja(); actualizarCaja();
-                alert('✅ Caja reiniciada.');
+                alert('✅ Caja reiniciada y guardada en la nube.');
             }
         }
 
