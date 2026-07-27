@@ -30,6 +30,7 @@
         .producto-img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: #eee; flex-shrink: 0; }
         .producto-info { flex: 1; }
         .producto-nombre { font-weight: bold; font-size: 13px; }
+        .producto-descripcion { color: #666; font-size: 11px; }
         .producto-precio { color: #e74c3c; font-weight: bold; font-size: 13px; }
         .producto-stock { font-size: 10px; padding: 1px 6px; border-radius: 8px; }
         .stock-disponible { background: #d4edda; color: #155724; }
@@ -91,7 +92,7 @@
             <button class="btn-accion btn-cobrar" id="btnCobrar" disabled onclick="cobrarVenta()">✅ COBRAR Y DESCONTAR STOCK</button>
         </div>
         <div id="seccionCanje" class="seccion">
-            <div class="box"><h3>🎫 PEDIDOS PENDIENTES</h3><div id="listaPendientes"><p style="color:#999;text-align:center;padding:20px;">No hay pedidos pendientes</p></div></div>
+            <div class="box"><h3>🎫 PEDIDOS PENDIENTES (NUBE)</h3><div id="listaPendientes"><p style="color:#999;text-align:center;padding:20px;">Cargando...</p></div></div>
         </div>
         <div id="seccionCaja" class="seccion">
             <div class="box"><h3>📊 CAJA DEL DÍA</h3>
@@ -109,7 +110,7 @@
     </div>
     <script src="js/config.js"></script>
     <script>
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbx6zsi54zeUZsjHHYg4El89KpRWxKCE4EdPNUY96GJSaWJpdPswj_mqb4YWKwdfoCz5IQ/exec';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyfhv12jFtlvjA9Y86byTUc9DyWo_2QLXcKmfGG0Xyp2sQjiOxChsWM5_XJSlfqEWygKw/exec';
         
         let carritoLocal = {};
         let productosSheet = [];
@@ -119,6 +120,7 @@
         let historialLocal = [];
         let pagoSeleccionado = 'efectivo';
         let libroCajaNube = [];
+        let pendientesNube = [];
 
         async function cargarDatosSheet() {
             try {
@@ -132,49 +134,44 @@
         }
 
         async function cargarLibroCajaNube() {
-            try {
-                var resp = await fetch(SHEET_URL + '?action=leerCaja');
-                libroCajaNube = await resp.json();
-            } catch(e) {
-                libroCajaNube = [];
-            }
+            try { var resp = await fetch(SHEET_URL + '?action=leerCaja'); libroCajaNube = await resp.json(); } catch(e) { libroCajaNube = []; }
+        }
+
+        async function cargarPendientesNube() {
+            try { var resp = await fetch(SHEET_URL + '?action=leerPendientes'); pendientesNube = await resp.json(); } catch(e) { pendientesNube = []; }
         }
 
         async function guardarCajaEnNube(fecha, efectivo, transferencia, tipo) {
-            try {
-                await fetch(SHEET_URL + '?action=guardarCaja&fecha=' + encodeURIComponent(fecha) + '&efectivo=' + efectivo + '&transferencia=' + transferencia + '&tipo=' + tipo);
-                await cargarLibroCajaNube();
-            } catch(e) {}
+            try { await fetch(SHEET_URL + '?action=guardarCaja&fecha=' + encodeURIComponent(fecha) + '&efectivo=' + efectivo + '&transferencia=' + transferencia + '&tipo=' + tipo); await cargarLibroCajaNube(); } catch(e) {}
+        }
+
+        async function borrarPendienteNube(codigo) {
+            try { await fetch(SHEET_URL + '?action=borrarPendiente&codigo=' + codigo); await cargarPendientesNube(); } catch(e) {}
         }
 
         function getProducto(id) { return productosSheet.find(function(p) { return p.id == id; }); }
         function getStock(id) { return stockActual[id] || 0; }
+        function nombreCompleto(prod) { return prod.nombre + (prod.descripcion ? ' ' + prod.descripcion : ''); }
 
         function cargarDatos() {
             var hoy = new Date().toLocaleDateString();
             var cajaGuardada = JSON.parse(localStorage.getItem('ariesDrinks_caja') || '{}');
             if (!cajaGuardada.fecha) { cajaEfectivo = 0; cajaTransferencia = 0; guardarCaja(); }
             else if (cajaGuardada.fecha !== hoy) {
-                if (cajaGuardada.efectivo > 0 || cajaGuardada.transferencia > 0) {
-                    guardarCajaEnNube(cajaGuardada.fecha, cajaGuardada.efectivo || 0, cajaGuardada.transferencia || 0, 'cierre');
-                }
-                cajaEfectivo = 0; cajaTransferencia = 0; historialLocal = [];
-                guardarCaja();
+                if (cajaGuardada.efectivo > 0 || cajaGuardada.transferencia > 0) { guardarCajaEnNube(cajaGuardada.fecha, cajaGuardada.efectivo || 0, cajaGuardada.transferencia || 0, 'cierre'); }
+                cajaEfectivo = 0; cajaTransferencia = 0; historialLocal = []; guardarCaja();
             } else { cajaEfectivo = cajaGuardada.efectivo || 0; cajaTransferencia = cajaGuardada.transferencia || 0; }
             historialLocal = JSON.parse(localStorage.getItem('ariesDrinks_data') || '{}').historial || [];
         }
 
-        function guardarCaja() {
-            localStorage.setItem('ariesDrinks_caja', JSON.stringify({ fecha: new Date().toLocaleDateString(), efectivo: cajaEfectivo, transferencia: cajaTransferencia }));
-        }
+        function guardarCaja() { localStorage.setItem('ariesDrinks_caja', JSON.stringify({ fecha: new Date().toLocaleDateString(), efectivo: cajaEfectivo, transferencia: cajaTransferencia })); }
 
-        async function descontarStockSheet(id, cantidad) {
-            try { await fetch(SHEET_URL + '?action=descontar&id=' + id + '&cantidad=' + cantidad); } catch(e) {}
-        }
+        async function descontarStockSheet(id, cantidad) { try { await fetch(SHEET_URL + '?action=descontar&id=' + id + '&cantidad=' + cantidad); } catch(e) {} }
 
         async function init() {
             await cargarDatosSheet();
             await cargarLibroCajaNube();
+            await cargarPendientesNube();
             cargarDatos();
             cargarProductosVenta();
             document.getElementById('pagoEfectivoBox').style.display = 'block';
@@ -226,7 +223,7 @@
                         var stockClass = stock > 3 ? 'stock-disponible' : (stock > 0 ? 'stock-bajo' : 'stock-agotado');
                         var stockText = stock > 3 ? 'Stock: ' + stock : (stock > 0 ? 'Poco: ' + stock : 'AGOTADO');
                         var imgSrc = (prod.imagen && prod.imagen.trim() !== '') ? prod.imagen : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="%23ddd"><rect width="40" height="40"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="18">🍽️</text></svg>';
-                        prodDiv.innerHTML += '<div class="producto' + (agotado ? ' agotado' : '') + '"><img class="producto-img" src="' + imgSrc + '" alt="' + prod.nombre + '" onerror="this.style.display=\'none\'"><div class="producto-info"><div class="producto-nombre">' + prod.nombre + '</div><div class="producto-precio">$' + prod.precio + ' <span class="producto-stock ' + stockClass + '">' + stockText + '</span></div></div><div class="cantidad-control"><button class="btn-cant" onclick="cambiarCantLocal(' + prod.id + ',-1)" ' + (agotado ? 'disabled' : '') + '>-</button><span class="cantidad" id="cantL-' + prod.id + '">0</span><button class="btn-cant" onclick="cambiarCantLocal(' + prod.id + ',1)" ' + (agotado ? 'disabled' : '') + '>+</button></div></div>';
+                        prodDiv.innerHTML += '<div class="producto' + (agotado ? ' agotado' : '') + '"><img class="producto-img" src="' + imgSrc + '" alt="' + prod.nombre + '" onerror="this.style.display=\'none\'"><div class="producto-info"><div class="producto-nombre">' + prod.nombre + '</div>' + (prod.descripcion ? '<div class="producto-descripcion">' + prod.descripcion + '</div>' : '') + '<div class="producto-precio">$' + prod.precio + ' <span class="producto-stock ' + stockClass + '">' + stockText + '</span></div></div><div class="cantidad-control"><button class="btn-cant" onclick="cambiarCantLocal(' + prod.id + ',-1)" ' + (agotado ? 'disabled' : '') + '>-</button><span class="cantidad" id="cantL-' + prod.id + '">0</span><button class="btn-cant" onclick="cambiarCantLocal(' + prod.id + ',1)" ' + (agotado ? 'disabled' : '') + '>+</button></div></div>';
                     });
                     cont.appendChild(subDiv);
                 });
@@ -256,7 +253,7 @@
                     var subtotal = prod.precio * carritoLocal[id];
                     total += subtotal;
                     items += carritoLocal[id];
-                    html += '<div class="detalle-item"><span>' + carritoLocal[id] + 'x ' + prod.nombre + '</span><span>$' + subtotal + '</span></div>';
+                    html += '<div class="detalle-item"><span>' + carritoLocal[id] + 'x ' + nombreCompleto(prod) + '</span><span>$' + subtotal + '</span></div>';
                 }
             }
             detalleDiv.innerHTML = items === 0 ? '<p style="color:#999;text-align:center;padding:10px;">Sin productos</p>' : html;
@@ -300,7 +297,7 @@
             }
             if (pagoSeleccionado === 'efectivo') { cajaEfectivo += total; } else { cajaTransferencia += total; }
             var venta = { codigo: codigo, tipo: 'local', fecha: new Date().toLocaleString(), total: total, pago: pagoSeleccionado, productos: [] };
-            for (var id2 in carritoLocal) { if (carritoLocal[id2] > 0) { var prod = getProducto(parseInt(id2)); if (prod) venta.productos.push({ nombre: prod.nombre, cantidad: carritoLocal[id2], precio: prod.precio }); } }
+            for (var id2 in carritoLocal) { if (carritoLocal[id2] > 0) { var prod = getProducto(parseInt(id2)); if (prod) venta.productos.push({ nombre: nombreCompleto(prod), cantidad: carritoLocal[id2], precio: prod.precio }); } }
             historialLocal.unshift(venta);
             guardarCaja();
             carritoLocal = {};
@@ -315,38 +312,44 @@
             alert('✅ Venta registrada: ' + codigo + '\nTotal: $' + total);
         }
 
-        function cargarPendientes() {
-            var pendientes = JSON.parse(localStorage.getItem('pendientesDelivery') || '[]');
+        async function cargarPendientes() {
+            await cargarPendientesNube();
             var div = document.getElementById('listaPendientes');
-            if (pendientes.length === 0) { div.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">No hay pedidos pendientes</p>'; return; }
+            if (pendientesNube.length === 0) { div.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">No hay pedidos pendientes</p>'; return; }
             var html = '';
-            pendientes.forEach(function(ped, index) {
-                var prodsTexto = ped.productos.filter(function(pr) { return pr.precio > 0; }).map(function(pr) { return pr.cantidad + 'x ' + pr.nombre; }).join(', ');
-                html += '<div class="pendiente-item"><strong>🎫 #' + ped.codigo + '</strong> | ' + ped.fecha + '<br>👤 ' + ped.cliente + ' | 📞 ' + ped.telefono + '<br>📍 ' + ped.direccion + ' | 🚚 ' + ped.zona + '<br>📦 ' + prodsTexto + '<br>💵 Total: $' + ped.total + ' | 💳 ' + (ped.pago === 'efectivo' ? 'Efectivo' : 'Transferencia') + '<br><button class="btn-confirmar" style="margin-top:8px;width:100%;" onclick="confirmarPedido(' + index + ')">✅ CONFIRMAR Y DESCONTAR STOCK</button></div>';
+            pendientesNube.forEach(function(ped, index) {
+                html += '<div class="pendiente-item"><strong>🎫 #' + ped.codigo + '</strong> | ' + ped.fecha + '<br>👤 ' + ped.cliente + ' | 📞 ' + ped.telefono + '<br>📍 ' + ped.direccion + ' | 🚚 ' + ped.zona + '<br>📦 ' + ped.productos + '<br>💵 Total: $' + ped.total + ' | 💳 ' + (ped.pago === 'efectivo' ? 'Efectivo' : 'Transferencia') + '<br><button class="btn-confirmar" style="margin-top:8px;width:100%;" onclick="confirmarPedido(\'' + ped.codigo + '\')">✅ CONFIRMAR Y DESCONTAR STOCK</button></div>';
             });
             div.innerHTML = html;
         }
 
-        function confirmarPedido(index) {
+        async function confirmarPedido(codigo) {
             cargarDatos();
-            var pendientes = JSON.parse(localStorage.getItem('pendientesDelivery') || '[]');
-            var ped = pendientes[index];
+            var ped = pendientesNube.find(function(p) { return p.codigo === codigo; });
             if (!ped) return;
-            if (!confirm('¿Confirmar pedido #' + ped.codigo + ' por $' + ped.total + '?')) return;
-            ped.productos.forEach(function(pr) {
-                stockActual[pr.id] = (stockActual[pr.id] || 0) - pr.cantidad;
-                if (stockActual[pr.id] < 0) stockActual[pr.id] = 0;
-                descontarStockSheet(pr.id, pr.cantidad);
-            });
-            if (ped.pago === 'efectivo') { cajaEfectivo += ped.total; } else { cajaTransferencia += ped.total; }
-            historialLocal.unshift({ codigo: ped.codigo, tipo: 'delivery', fecha: new Date().toLocaleString(), cliente: ped.cliente, total: ped.total, pago: ped.pago, productos: ped.productos });
-            pendientes.splice(index, 1);
-            localStorage.setItem('pendientesDelivery', JSON.stringify(pendientes));
+            if (!confirm('¿Confirmar pedido #' + codigo + ' por $' + ped.total + '?')) return;
+            var prods = ped.productos.split(', ');
+            for (var i = 0; i < prods.length; i++) {
+                var partes = prods[i].split('x ');
+                if (partes.length >= 2) {
+                    var cantidad = parseInt(partes[0]);
+                    var nombreProd = partes.slice(1).join('x ').trim();
+                    var prod = productosSheet.find(function(p) { return nombreCompleto(p) === nombreProd || p.nombre === nombreProd; });
+                    if (prod) {
+                        stockActual[prod.id] = (stockActual[prod.id] || 0) - cantidad;
+                        if (stockActual[prod.id] < 0) stockActual[prod.id] = 0;
+                        descontarStockSheet(prod.id, cantidad);
+                    }
+                }
+            }
+            if (ped.pago === 'efectivo') { cajaEfectivo += parseFloat(ped.total); } else { cajaTransferencia += parseFloat(ped.total); }
+            historialLocal.unshift({ codigo: codigo, tipo: 'delivery', fecha: new Date().toLocaleString(), cliente: ped.cliente, total: ped.total, pago: ped.pago, productos: ped.productos });
+            await borrarPendienteNube(codigo);
             guardarCaja();
-            cargarPendientes();
+            await cargarPendientes();
             cargarProductosVenta();
             actualizarCaja();
-            alert('✅ Pedido #' + ped.codigo + ' confirmado.');
+            alert('✅ Pedido #' + codigo + ' confirmado.');
         }
 
         function actualizarCaja() {
@@ -359,17 +362,9 @@
             var html = '';
             historialLocal.slice(0, 20).forEach(function(h) { html += '<div class="historial-item"><span>#' + h.codigo + ' | ' + (h.tipo === 'local' ? '🏠' : '🛵') + ' | ' + (h.pago === 'efectivo' ? '💵' : '🏦') + '</span><strong>$' + h.total + '</strong></div>'; });
             div.innerHTML = html;
-
             var libroDiv = document.getElementById('listaLibroCaja');
-            if (!libroCajaNube || libroCajaNube.length === 0) {
-                libroDiv.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">Sin registros en la nube</p>';
-            } else {
-                var libroHtml = '';
-                libroCajaNube.slice(0, 10).forEach(function(d) {
-                    libroHtml += '<div class="historial-item"><span>📅 ' + d.fecha + '</span><span>💵 $' + d.efectivo + ' | 🏦 $' + d.transferencia + ' | <strong>$' + d.total + '</strong></span></div>';
-                });
-                libroDiv.innerHTML = libroHtml;
-            }
+            if (!libroCajaNube || libroCajaNube.length === 0) { libroDiv.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">Sin registros en la nube</p>'; }
+            else { var libroHtml = ''; libroCajaNube.slice(0, 10).forEach(function(d) { libroHtml += '<div class="historial-item"><span>📅 ' + d.fecha + '</span><span>💵 $' + d.efectivo + ' | 🏦 $' + d.transferencia + ' | <strong>$' + d.total + '</strong></span></div>'; }); libroDiv.innerHTML = libroHtml; }
         }
 
         async function reiniciarCaja() {

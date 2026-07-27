@@ -85,7 +85,7 @@
     </div>
     <script src="js/config.js"></script>
     <script>
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzcZRKmUEQikaxq3vfrdeeDNsyk_f-ZhWvY-El_VJCpX_tRErtBGfYZ1ibtX6auP0VS6A/exec';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyfhv12jFtlvjA9Y86byTUc9DyWo_2QLXcKmfGG0Xyp2sQjiOxChsWM5_XJSlfqEWygKw/exec';
         
         document.getElementById('nombreLocal').textContent = CONFIG.nombreLocal;
         let carrito = {};
@@ -96,22 +96,16 @@
             try {
                 var resp = await fetch(SHEET_URL + '?action=leer');
                 productosSheet = await resp.json();
-                productosSheet.forEach(function(p) {
-                    stockActual[p.id] = p.stock;
-                });
+                productosSheet.forEach(function(p) { stockActual[p.id] = p.stock; });
             } catch(e) {
                 PRODUCTOS.forEach(function(p) { stockActual[p.id] = p.stock || 0; });
                 productosSheet = PRODUCTOS;
             }
         }
 
-        function getProducto(id) {
-            return productosSheet.find(function(p) { return p.id == id; });
-        }
-
-        function getStock(id) {
-            return stockActual[id] || 0;
-        }
+        function getProducto(id) { return productosSheet.find(function(p) { return p.id == id; }); }
+        function getStock(id) { return stockActual[id] || 0; }
+        function nombreCompleto(prod) { return prod.nombre + (prod.descripcion ? ' ' + prod.descripcion : ''); }
 
         async function cargarProductos() {
             await cargarDatosSheet();
@@ -175,7 +169,7 @@
                     if (!prod) continue;
                     total += prod.precio * carrito[id];
                     items += carrito[id];
-                    html += '<div class="carrito-item"><span>' + carrito[id] + 'x ' + prod.nombre + '</span><span>$' + (prod.precio * carrito[id]) + '</span></div>';
+                    html += '<div class="carrito-item"><span>' + carrito[id] + 'x ' + nombreCompleto(prod) + '</span><span>$' + (prod.precio * carrito[id]) + '</span></div>';
                 }
             }
             div.innerHTML = items === 0 ? '<div class="carrito-vacio">No hay productos</div>' : html;
@@ -227,32 +221,40 @@
             document.getElementById('btnEnviar').disabled = !ok;
         }
 
-        document.getElementById('btnEnviar').addEventListener('click', function() {
+        async function guardarPendienteEnSheet(codigo, fecha, cliente, telefono, direccion, zona, productos, total, pago) {
+            try {
+                await fetch(SHEET_URL + '?action=guardarPendiente&codigo=' + encodeURIComponent(codigo) + '&fecha=' + encodeURIComponent(fecha) + '&cliente=' + encodeURIComponent(cliente) + '&telefono=' + encodeURIComponent(telefono) + '&direccion=' + encodeURIComponent(direccion) + '&zona=' + encodeURIComponent(zona) + '&productos=' + encodeURIComponent(productos) + '&total=' + total + '&pago=' + pago);
+            } catch(e) {}
+        }
+
+        document.getElementById('btnEnviar').addEventListener('click', async function() {
             var zonaVal = document.getElementById('zonaEnvio').value, parts = zonaVal.split('|');
-            var pendientes = JSON.parse(localStorage.getItem('pendientesDelivery') || '[]');
-            var maxCod = 0;
-            pendientes.forEach(function(p) { if (p.codigo && p.codigo.startsWith('AR-')) { var n = parseInt(p.codigo.split('-')[1]); if (n > maxCod) maxCod = n; } });
-            var codigo = 'AR-' + String(maxCod + 1).padStart(3, '0');
-            var productosFinal = [], subt = 0;
+            var maxCod = Math.floor(Math.random() * 9000) + 1000;
+            var codigo = 'AR-' + String(maxCod).padStart(3, '0');
+            var productosFinal = [], subt = 0, prodsTexto = '';
             for (var id in carrito) {
                 if (carrito[id] > 0) {
                     var p = getProducto(parseInt(id));
                     if (!p) continue;
-                    productosFinal.push({ id: p.id, nombre: p.nombre, cantidad: carrito[id], precio: p.precio });
+                    productosFinal.push({ nombre: nombreCompleto(p), cantidad: carrito[id], precio: p.precio });
                     subt += p.precio * carrito[id];
+                    prodsTexto += carrito[id] + 'x ' + nombreCompleto(p) + ', ';
                 }
             }
             var env = parseInt(parts[0]), total = subt + env;
+            var pago = document.querySelector('input[name="pago"]:checked').value;
+
+            await guardarPendienteEnSheet(codigo, new Date().toLocaleString(), document.getElementById('nombreCliente').value, document.getElementById('telefonoCliente').value, document.getElementById('direccionCliente').value, parts[1], prodsTexto, total, pago);
+
             var msg = '🛵 *NUEVO PEDIDO - ARIES DRINKS*\n\n🎫 *CÓDIGO: #' + codigo + '*\n📦 *ESTADO: PENDIENTE*\n\n👤 *Cliente:* ' + document.getElementById('nombreCliente').value + '\n📞 *Tel:* ' + document.getElementById('telefonoCliente').value + '\n📍 *Dir:* ' + document.getElementById('direccionCliente').value + '\n🚚 *Envío a ' + parts[1] + ':* $' + parts[0] + '\n';
             var obs = document.getElementById('observaciones').value.trim();
             if (obs) msg += '📝 *Obs:* ' + obs + '\n';
             msg += '\n📋 *PEDIDO:*\n';
             productosFinal.forEach(function(pr) { msg += '- ' + pr.cantidad + 'x ' + pr.nombre + ': $' + (pr.precio * pr.cantidad) + '\n'; });
-            msg += '\n💰 Subtotal: $' + subt + '\n🚚 Envío: $' + env + '\n💵 *TOTAL: $' + total + '*\n💳 *Pago:* ' + (document.querySelector('input[name="pago"]:checked').value === 'efectivo' ? 'Efectivo' : 'Transferencia');
-            if (document.querySelector('input[name="pago"]:checked').value === 'efectivo') { var monto = document.getElementById('montoPago').value; msg += '\n💵 Paga con: $' + monto + '\n🔄 Vuelto: $' + (monto - total); }
+            msg += '\n💰 Subtotal: $' + subt + '\n🚚 Envío: $' + env + '\n💵 *TOTAL: $' + total + '*\n💳 *Pago:* ' + (pago === 'efectivo' ? 'Efectivo' : 'Transferencia');
+            if (pago === 'efectivo') { var monto = document.getElementById('montoPago').value; msg += '\n💵 Paga con: $' + monto + '\n🔄 Vuelto: $' + (monto - total); }
             msg += '\n\n⚠️ *Pendiente de confirmación*';
-            pendientes.push({ codigo: codigo, fecha: new Date().toLocaleString(), cliente: document.getElementById('nombreCliente').value, telefono: document.getElementById('telefonoCliente').value, direccion: document.getElementById('direccionCliente').value, zona: parts[1], envio: env, productos: productosFinal, total: total, pago: document.querySelector('input[name="pago"]:checked').value });
-            localStorage.setItem('pendientesDelivery', JSON.stringify(pendientes));
+            
             carrito = {}; actualizarCarrito(); cargarProductos();
             window.open('https://wa.me/' + CONFIG.telefono + '?text=' + encodeURIComponent(msg), '_blank');
         });
