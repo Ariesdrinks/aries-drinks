@@ -36,6 +36,7 @@
         .stock-disponible { background: #d4edda; color: #155724; }
         .stock-bajo { background: #fff3cd; color: #856404; }
         .stock-agotado { background: #f8d7da; color: #721c24; }
+        .combo-badge { background: #f39c12; color: white; font-size: 9px; padding: 1px 5px; border-radius: 6px; margin-left: 4px; }
         .cantidad-control { display: flex; align-items: center; gap: 4px; }
         .btn-cant { background: #e74c3c; color: white; border: none; width: 24px; height: 24px; border-radius: 50%; font-size: 14px; cursor: pointer; }
         .btn-cant:disabled { background: #ccc; }
@@ -112,7 +113,7 @@
     </div>
     <script src="js/config.js"></script>
     <script>
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyfhv12jFtlvjA9Y86byTUc9DyWo_2QLXcKmfGG0Xyp2sQjiOxChsWM5_XJSlfqEWygKw/exec';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbztUkuj8fEuVI_OOSVE5seXgnLBiEFm_TOanpiyo7XPW8ATQqWibBtAbEM2YRqMCH2B3A/exec';
         
         let carritoLocal = {};
         let productosSheet = [];
@@ -135,7 +136,27 @@
         async function borrarPendienteNube(codigo) { try { await fetch(SHEET_URL + '?action=borrarPendiente&codigo=' + codigo); await cargarPendientesNube(); } catch(e) {} }
 
         function getProducto(id) { return productosSheet.find(function(p) { return p.id == id; }); }
-        function getStock(id) { return stockActual[id] || 0; }
+
+        function getStock(id) {
+            var prod = getProducto(id);
+            if (prod && prod.esCombo) {
+                var minStock = Infinity;
+                if (prod.productos) {
+                    var partes = String(prod.productos).split(',');
+                    for (var i = 0; i < partes.length; i++) {
+                        var p = partes[i].split(':');
+                        if (p.length >= 2) {
+                            var s = stockActual[parseInt(p[0])] || 0;
+                            var posible = Math.floor(s / parseInt(p[1]));
+                            if (posible < minStock) minStock = posible;
+                        }
+                    }
+                }
+                return Math.min(minStock, prod.stock || Infinity);
+            }
+            return stockActual[id] || 0;
+        }
+
         function nombreCompleto(prod) { return prod.nombre + (prod.descripcion ? ' ' + prod.descripcion : ''); }
 
         function cargarDatos() {
@@ -151,6 +172,7 @@
 
         function guardarCaja() { localStorage.setItem('ariesDrinks_caja', JSON.stringify({ fecha: new Date().toLocaleDateString(), efectivo: cajaEfectivo, transferencia: cajaTransferencia })); }
         async function descontarStockSheet(id, cantidad) { try { await fetch(SHEET_URL + '?action=descontar&id=' + id + '&cantidad=' + cantidad); } catch(e) {} }
+        async function descontarComboSheet(idCombo, cantidad) { try { await fetch(SHEET_URL + '?action=descontarCombo&idCombo=' + idCombo + '&cantidad=' + cantidad); } catch(e) {} }
 
         async function init() {
             await cargarDatosSheet(); await cargarLibroCajaNube(); await cargarPendientesNube();
@@ -197,8 +219,9 @@
                         var stock = getStock(prod.id); var agotado = stock === 0;
                         var stockClass = stock > 3 ? 'stock-disponible' : (stock > 0 ? 'stock-bajo' : 'stock-agotado');
                         var stockText = stock > 3 ? 'Stock: ' + stock : (stock > 0 ? 'Poco: ' + stock : 'AGOTADO');
+                        var comboBadge = prod.esCombo ? '<span class="combo-badge">COMBO</span>' : '';
                         var imgSrc = (prod.imagen && prod.imagen.trim() !== '') ? prod.imagen : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="%23ddd"><rect width="40" height="40"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="18">🍽️</text></svg>';
-                        prodDiv.innerHTML += '<div class="producto' + (agotado ? ' agotado' : '') + '"><img class="producto-img" src="' + imgSrc + '" alt="' + prod.nombre + '" onerror="this.style.display=\'none\'"><div class="producto-info"><div class="producto-nombre">' + prod.nombre + '</div>' + (prod.descripcion ? '<div class="producto-descripcion">' + prod.descripcion + '</div>' : '') + '<div class="producto-precio">$' + prod.precio + ' <span class="producto-stock ' + stockClass + '">' + stockText + '</span></div></div><div class="cantidad-control"><button class="btn-cant" onclick="cambiarCantLocal(' + prod.id + ',-1)" ' + (agotado ? 'disabled' : '') + '>-</button><span class="cantidad" id="cantL-' + prod.id + '">0</span><button class="btn-cant" onclick="cambiarCantLocal(' + prod.id + ',1)" ' + (agotado ? 'disabled' : '') + '>+</button></div></div>';
+                        prodDiv.innerHTML += '<div class="producto' + (agotado ? ' agotado' : '') + '"><img class="producto-img" src="' + imgSrc + '" alt="' + prod.nombre + '" onerror="this.style.display=\'none\'"><div class="producto-info"><div class="producto-nombre">' + prod.nombre + comboBadge + '</div>' + (prod.descripcion ? '<div class="producto-descripcion">' + prod.descripcion + '</div>' : '') + '<div class="producto-precio">$' + prod.precio + ' <span class="producto-stock ' + stockClass + '">' + stockText + '</span></div></div><div class="cantidad-control"><button class="btn-cant" onclick="cambiarCantLocal(' + prod.id + ',-1)" ' + (agotado ? 'disabled' : '') + '>-</button><span class="cantidad" id="cantL-' + prod.id + '">0</span><button class="btn-cant" onclick="cambiarCantLocal(' + prod.id + ',1)" ' + (agotado ? 'disabled' : '') + '>+</button></div></div>';
                     });
                     cont.appendChild(subDiv);
                 });
@@ -258,9 +281,16 @@
             var codigo = 'L-' + String(Math.floor(Math.random() * 9000) + 1000);
             for (var id in carritoLocal) {
                 if (carritoLocal[id] > 0) {
-                    stockActual[id] = (stockActual[id] || 0) - carritoLocal[id];
-                    if (stockActual[id] < 0) stockActual[id] = 0;
-                    descontarStockSheet(id, carritoLocal[id]);
+                    var prod = getProducto(parseInt(id));
+                    if (prod && prod.esCombo) {
+                        stockActual[id] = (stockActual[id] || 0) - carritoLocal[id];
+                        if (stockActual[id] < 0) stockActual[id] = 0;
+                        descontarComboSheet(id, carritoLocal[id]);
+                    } else {
+                        stockActual[id] = (stockActual[id] || 0) - carritoLocal[id];
+                        if (stockActual[id] < 0) stockActual[id] = 0;
+                        descontarStockSheet(id, carritoLocal[id]);
+                    }
                 }
             }
             if (pagoSeleccionado === 'efectivo') { cajaEfectivo += total; } else { cajaTransferencia += total; }
@@ -297,7 +327,17 @@
                 var partes = prods[i].split('x '); if (partes.length >= 2) {
                     var cantidad = parseInt(partes[0]); var nombreProd = partes.slice(1).join('x ').trim();
                     var prod = productosSheet.find(function(p) { return nombreCompleto(p) === nombreProd || p.nombre === nombreProd; });
-                    if (prod) { stockActual[prod.id] = (stockActual[prod.id] || 0) - cantidad; if (stockActual[prod.id] < 0) stockActual[prod.id] = 0; descontarStockSheet(prod.id, cantidad); }
+                    if (prod) {
+                        if (prod.esCombo) {
+                            stockActual[prod.id] = (stockActual[prod.id] || 0) - cantidad;
+                            if (stockActual[prod.id] < 0) stockActual[prod.id] = 0;
+                            descontarComboSheet(prod.id, cantidad);
+                        } else {
+                            stockActual[prod.id] = (stockActual[prod.id] || 0) - cantidad;
+                            if (stockActual[prod.id] < 0) stockActual[prod.id] = 0;
+                            descontarStockSheet(prod.id, cantidad);
+                        }
+                    }
                 }
             }
             if (ped.pago === 'efectivo') { cajaEfectivo += parseFloat(ped.total); } else { cajaTransferencia += parseFloat(ped.total); }

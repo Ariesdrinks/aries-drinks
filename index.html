@@ -29,6 +29,7 @@
         .stock-disponible { background: #d4edda; color: #155724; }
         .stock-bajo { background: #fff3cd; color: #856404; }
         .stock-agotado { background: #f8d7da; color: #721c24; }
+        .combo-badge { background: #f39c12; color: white; font-size: 10px; padding: 2px 6px; border-radius: 8px; margin-left: 5px; }
         .cantidad-control { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
         .btn-cant { background: #e74c3c; color: white; border: none; width: 26px; height: 26px; border-radius: 50%; font-size: 15px; cursor: pointer; }
         .btn-cant:disabled { background: #ccc; }
@@ -85,7 +86,7 @@
     </div>
     <script src="js/config.js"></script>
     <script>
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyfhv12jFtlvjA9Y86byTUc9DyWo_2QLXcKmfGG0Xyp2sQjiOxChsWM5_XJSlfqEWygKw/exec';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbztUkuj8fEuVI_OOSVE5seXgnLBiEFm_TOanpiyo7XPW8ATQqWibBtAbEM2YRqMCH2B3A/exec';
         
         document.getElementById('nombreLocal').textContent = CONFIG.nombreLocal;
         let carrito = {};
@@ -104,7 +105,27 @@
         }
 
         function getProducto(id) { return productosSheet.find(function(p) { return p.id == id; }); }
-        function getStock(id) { return stockActual[id] || 0; }
+
+        function getStock(id) {
+            var prod = getProducto(id);
+            if (prod && prod.esCombo) {
+                var minStock = Infinity;
+                if (prod.productos) {
+                    var partes = String(prod.productos).split(',');
+                    for (var i = 0; i < partes.length; i++) {
+                        var p = partes[i].split(':');
+                        if (p.length >= 2) {
+                            var s = stockActual[parseInt(p[0])] || 0;
+                            var posible = Math.floor(s / parseInt(p[1]));
+                            if (posible < minStock) minStock = posible;
+                        }
+                    }
+                }
+                return Math.min(minStock, prod.stock || Infinity);
+            }
+            return stockActual[id] || 0;
+        }
+
         function nombreCompleto(prod) { return prod.nombre + (prod.descripcion ? ' ' + prod.descripcion : ''); }
 
         async function cargarProductos() {
@@ -129,10 +150,11 @@
                         var agotado = stock === 0;
                         var stockClass = stock > 3 ? 'stock-disponible' : (stock > 0 ? 'stock-bajo' : 'stock-agotado');
                         var stockText = stock > 3 ? 'Stock: ' + stock : (stock > 0 ? '¡Últimas ' + stock + '!' : 'AGOTADO');
+                        var comboBadge = prod.esCombo ? '<span class="combo-badge">COMBO</span>' : '';
                         var imgSrc = (prod.imagen && prod.imagen.trim() !== '') ? prod.imagen : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" fill="%23ddd"><rect width="50" height="50"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="22">🍽️</text></svg>';
                         prodDiv.innerHTML += '<div class="producto' + (agotado ? ' agotado' : '') + '">' +
                             '<img class="producto-img" src="' + imgSrc + '" alt="' + prod.nombre + '" onerror="this.style.display=\'none\'">' +
-                            '<div class="producto-info"><div class="producto-nombre">' + prod.nombre + '</div>' +
+                            '<div class="producto-info"><div class="producto-nombre">' + prod.nombre + comboBadge + '</div>' +
                             (prod.descripcion ? '<div class="producto-descripcion">' + prod.descripcion + '</div>' : '') +
                             '<div class="producto-precio">$' + prod.precio + ' <span class="producto-stock ' + stockClass + '">' + stockText + '</span></div></div>' +
                             '<div class="cantidad-control"><button class="btn-cant" onclick="cambiarCant(' + prod.id + ',-1)" ' + (agotado ? 'disabled' : '') + '>-</button>' +
@@ -236,7 +258,7 @@
                 if (carrito[id] > 0) {
                     var p = getProducto(parseInt(id));
                     if (!p) continue;
-                    productosFinal.push({ nombre: nombreCompleto(p), cantidad: carrito[id], precio: p.precio });
+                    productosFinal.push({ nombre: nombreCompleto(p), cantidad: carrito[id], precio: p.precio, esCombo: p.esCombo, productosCombo: p.productos });
                     subt += p.precio * carrito[id];
                     prodsTexto += carrito[id] + 'x ' + nombreCompleto(p) + ', ';
                 }
