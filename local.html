@@ -113,7 +113,7 @@
     </div>
     <script src="js/config.js"></script>
     <script>
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbztUkuj8fEuVI_OOSVE5seXgnLBiEFm_TOanpiyo7XPW8ATQqWibBtAbEM2YRqMCH2B3A/exec';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzIpLnLiAZmwzMsGCUJPXgeoYmvVoD5lb5xOA2mxGojXC6FwY7wM2_3bqqF1_sYQuzBhg/exec';
         
         let carritoLocal = {};
         let productosSheet = [];
@@ -134,6 +134,7 @@
         async function cargarPendientesNube() { try { var resp = await fetch(SHEET_URL + '?action=leerPendientes'); pendientesNube = await resp.json(); } catch(e) { pendientesNube = []; } }
         async function guardarCajaEnNube(fecha, efectivo, transferencia, tipo) { try { await fetch(SHEET_URL + '?action=guardarCaja&fecha=' + encodeURIComponent(fecha) + '&efectivo=' + efectivo + '&transferencia=' + transferencia + '&tipo=' + tipo); await cargarLibroCajaNube(); } catch(e) {} }
         async function borrarPendienteNube(codigo) { try { await fetch(SHEET_URL + '?action=borrarPendiente&codigo=' + codigo); await cargarPendientesNube(); } catch(e) {} }
+        async function guardarVentaEnNube(codigo, fecha, tipo, pago, total, productos) { try { await fetch(SHEET_URL + '?action=guardarVenta&codigo=' + encodeURIComponent(codigo) + '&fecha=' + encodeURIComponent(fecha) + '&tipo=' + tipo + '&pago=' + pago + '&total=' + total + '&productos=' + encodeURIComponent(productos)); } catch(e) {} }
 
         function getProducto(id) { return productosSheet.find(function(p) { return p.id == id; }); }
 
@@ -275,27 +276,30 @@
             } else { div.innerHTML = 'Vuelto: $0'; div.style.background = '#d4edda'; div.style.color = '#155724'; }
         }
 
-        function cobrarVenta() {
+        async function cobrarVenta() {
             var total = parseInt(document.getElementById('totalVenta').textContent) || 0;
             if (total === 0) return;
             var codigo = 'L-' + String(Math.floor(Math.random() * 9000) + 1000);
+            var prodsTexto = '';
             for (var id in carritoLocal) {
                 if (carritoLocal[id] > 0) {
                     var prod = getProducto(parseInt(id));
-                    if (prod && prod.esCombo) {
+                    if (!prod) continue;
+                    prodsTexto += carritoLocal[id] + 'x ' + nombreCompleto(prod) + ', ';
+                    if (prod.esCombo) {
                         stockActual[id] = (stockActual[id] || 0) - carritoLocal[id];
                         if (stockActual[id] < 0) stockActual[id] = 0;
-                        descontarComboSheet(id, carritoLocal[id]);
+                        await descontarComboSheet(id, carritoLocal[id]);
                     } else {
                         stockActual[id] = (stockActual[id] || 0) - carritoLocal[id];
                         if (stockActual[id] < 0) stockActual[id] = 0;
-                        descontarStockSheet(id, carritoLocal[id]);
+                        await descontarStockSheet(id, carritoLocal[id]);
                     }
                 }
             }
             if (pagoSeleccionado === 'efectivo') { cajaEfectivo += total; } else { cajaTransferencia += total; }
-            var venta = { codigo: codigo, tipo: 'local', fecha: new Date().toLocaleString(), total: total, pago: pagoSeleccionado, productos: [] };
-            for (var id2 in carritoLocal) { if (carritoLocal[id2] > 0) { var prod = getProducto(parseInt(id2)); if (prod) venta.productos.push({ nombre: nombreCompleto(prod), cantidad: carritoLocal[id2], precio: prod.precio }); } }
+            await guardarVentaEnNube(codigo, new Date().toLocaleString(), 'local', pagoSeleccionado, total, prodsTexto);
+            var venta = { codigo: codigo, tipo: 'local', fecha: new Date().toLocaleString(), total: total, pago: pagoSeleccionado, productos: prodsTexto };
             historialLocal.unshift(venta); guardarCaja();
             carritoLocal = {};
             document.getElementById('detalleVenta').innerHTML = '<p style="color:#999;text-align:center;padding:10px;">Sin productos</p>';
@@ -331,23 +335,24 @@
                         if (prod.esCombo) {
                             stockActual[prod.id] = (stockActual[prod.id] || 0) - cantidad;
                             if (stockActual[prod.id] < 0) stockActual[prod.id] = 0;
-                            descontarComboSheet(prod.id, cantidad);
+                            await descontarComboSheet(prod.id, cantidad);
                         } else {
                             stockActual[prod.id] = (stockActual[prod.id] || 0) - cantidad;
                             if (stockActual[prod.id] < 0) stockActual[prod.id] = 0;
-                            descontarStockSheet(prod.id, cantidad);
+                            await descontarStockSheet(prod.id, cantidad);
                         }
                     }
                 }
             }
             if (ped.pago === 'efectivo') { cajaEfectivo += parseFloat(ped.total); } else { cajaTransferencia += parseFloat(ped.total); }
+            await guardarVentaEnNube(codigo, new Date().toLocaleString(), 'delivery', ped.pago, ped.total, ped.productos);
             historialLocal.unshift({ codigo: codigo, tipo: 'delivery', fecha: new Date().toLocaleString(), cliente: ped.cliente, total: ped.total, pago: ped.pago, productos: ped.productos });
             await borrarPendienteNube(codigo); guardarCaja(); await cargarPendientes(); cargarProductosVenta(); actualizarCaja();
             alert('✅ Pedido #' + codigo + ' confirmado.');
         }
 
         async function rechazarPedido(codigo) {
-            if (!confirm('¿Rechazar pedido #' + codigo + '? Se eliminará de la lista.')) return;
+            if (!confirm('¿Rechazar pedido #' + codigo + '?')) return;
             await borrarPendienteNube(codigo); await cargarPendientes();
             alert('❌ Pedido #' + codigo + ' rechazado.');
         }
