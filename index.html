@@ -41,6 +41,8 @@
         .envio-linea { font-size: 14px; color: #666; text-align: right; }
         .btn-enviar { background: #25D366; color: white; border: none; padding: 15px; border-radius: 50px; font-size: 16px; width: 100%; cursor: pointer; font-weight: bold; }
         .btn-enviar:disabled { background: #ccc; }
+        .btn-wpp-alt { background: #128C7E; color: white; border: none; padding: 12px; border-radius: 25px; font-size: 14px; width: 100%; cursor: pointer; margin-top: 8px; display: none; }
+        .aviso-wpp { background: #fff9e6; padding: 12px; border-radius: 10px; text-align: center; margin-top: 10px; display: none; border: 2px solid #f39c12; }
         .pago-opcion { display: block; padding: 10px 15px; border: 2px solid #ddd; border-radius: 10px; margin-bottom: 6px; cursor: pointer; font-size: 15px; }
         .pago-opcion input { width: auto; margin-right: 8px; }
         .vuelto-box { background: #fff9e6; padding: 10px; border-radius: 8px; margin-top: 6px; }
@@ -83,10 +85,15 @@
             <label class="pago-opcion"><input type="radio" name="pago" value="transferencia"> 🏦 Transferencia Bancaria</label>
         </div>
         <button class="btn-enviar" id="btnEnviar" disabled>📱 Enviar Pedido por WhatsApp</button>
+        <div class="aviso-wpp" id="avisoWpp">
+            <p>⚠️ <strong>¿No se abrió WhatsApp?</strong></p>
+            <p>Tu pedido ya fue registrado. Mandanos un mensaje con tu nombre al WhatsApp del local para confirmar.</p>
+            <button class="btn-wpp-alt" id="btnWppAlt">📱 Abrir WhatsApp ahora</button>
+        </div>
     </div>
     <script src="js/config.js"></script>
     <script>
-        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbztUkuj8fEuVI_OOSVE5seXgnLBiEFm_TOanpiyo7XPW8ATQqWibBtAbEM2YRqMCH2B3A/exec';
+        const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzIpLnLiAZmwzMsGCUJPXgeoYmvVoD5lb5xOA2mxGojXC6FwY7wM2_3bqqF1_sYQuzBhg/exec';
         
         document.getElementById('nombreLocal').textContent = CONFIG.nombreLocal;
         let carrito = {};
@@ -253,12 +260,11 @@
             var zonaVal = document.getElementById('zonaEnvio').value, parts = zonaVal.split('|');
             var maxCod = Math.floor(Math.random() * 9000) + 1000;
             var codigo = 'AR-' + String(maxCod).padStart(3, '0');
-            var productosFinal = [], subt = 0, prodsTexto = '';
+            var subt = 0, prodsTexto = '';
             for (var id in carrito) {
                 if (carrito[id] > 0) {
                     var p = getProducto(parseInt(id));
                     if (!p) continue;
-                    productosFinal.push({ nombre: nombreCompleto(p), cantidad: carrito[id], precio: p.precio, esCombo: p.esCombo, productosCombo: p.productos });
                     subt += p.precio * carrito[id];
                     prodsTexto += carrito[id] + 'x ' + nombreCompleto(p) + ', ';
                 }
@@ -271,14 +277,18 @@
             var msg = '🛵 *NUEVO PEDIDO - ARIES DRINKS*\n\n🎫 *CÓDIGO: #' + codigo + '*\n📦 *ESTADO: PENDIENTE*\n\n👤 *Cliente:* ' + document.getElementById('nombreCliente').value + '\n📞 *Tel:* ' + document.getElementById('telefonoCliente').value + '\n📍 *Dir:* ' + document.getElementById('direccionCliente').value + '\n🚚 *Envío a ' + parts[1] + ':* $' + parts[0] + '\n';
             var obs = document.getElementById('observaciones').value.trim();
             if (obs) msg += '📝 *Obs:* ' + obs + '\n';
-            msg += '\n📋 *PEDIDO:*\n';
-            productosFinal.forEach(function(pr) { msg += '- ' + pr.cantidad + 'x ' + pr.nombre + ': $' + (pr.precio * pr.cantidad) + '\n'; });
-            msg += '\n💰 Subtotal: $' + subt + '\n🚚 Envío: $' + env + '\n💵 *TOTAL: $' + total + '*\n💳 *Pago:* ' + (pago === 'efectivo' ? 'Efectivo' : 'Transferencia');
+            msg += '\n📋 *PEDIDO:*\n' + prodsTexto.replace(/, $/, '').split(', ').map(function(line) { return '- ' + line; }).join('\n');
+            msg += '\n\n💰 Subtotal: $' + subt + '\n🚚 Envío: $' + env + '\n💵 *TOTAL: $' + total + '*\n💳 *Pago:* ' + (pago === 'efectivo' ? 'Efectivo' : 'Transferencia');
             if (pago === 'efectivo') { var monto = document.getElementById('montoPago').value; msg += '\n💵 Paga con: $' + monto + '\n🔄 Vuelto: $' + (monto - total); }
-            msg += '\n\n⚠️ *Pendiente de confirmación*';
             
             carrito = {}; actualizarCarrito(); cargarProductos();
+            
             window.open('https://wa.me/' + CONFIG.telefono + '?text=' + encodeURIComponent(msg), '_blank');
+            
+            document.getElementById('avisoWpp').style.display = 'block';
+            document.getElementById('btnWppAlt').onclick = function() {
+                window.open('https://wa.me/' + CONFIG.telefono + '?text=' + encodeURIComponent(msg), '_blank');
+            };
         });
 
         cargarProductos();
